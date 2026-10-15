@@ -68,17 +68,22 @@ class WebLoginRoutes:
         except Exception:
             return 503, _page("Login unavailable", "<p>Please try again later.</p>"), {}
 
-    def callback(self, query):
+    def callback(self, query, cookie_header=""):
         first = lambda key: (query.get(key) or [""])[0]
+        state = first("state")
+        state_cookie = _cookie_value(cookie_header, OIDC_STATE_COOKIE)
         if first("error"):
-            return 400, _page("Sign-in cancelled", "<p>You can close this tab.</p>"), {}
+            return 400, _page("Sign-in cancelled", "<p>You can close this tab.</p>"), {"Set-Cookie-3": _clear_state_cookie()}
+        if not state or not state_cookie or not hmac.compare_digest(state, state_cookie):
+            return 400, _page("Sign-in failed", "<p>Please start again from the login page.</p>"), {"Set-Cookie-3": _clear_state_cookie()}
         try:
-            subject = self.oidc.complete(first("state"), first("code"))
+            subject = self.oidc.complete(state, first("code"))
             issued = self.sessions.create(subject)
             headers = {
                 "Location": self.web_path,
                 "Set-Cookie": session_cookie(issued["token"]),
                 "Set-Cookie-2": _csrf_cookie(issued["csrf_token"]),
+                "Set-Cookie-3": _clear_state_cookie(),
             }
             return 303, "", headers
         except (OIDCError, ValueError):
