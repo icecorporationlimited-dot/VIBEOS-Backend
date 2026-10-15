@@ -27,6 +27,14 @@ The authenticated browser media route now resolves the current web session and c
 
 This remains Telegram-worker groundwork, not end-to-end web publishing support. Worker account/token resolution remains Telegram-specific, and worker state transitions and account lifecycle paths still need a full tenant-boundary audit before public multi-user publishing.
 
+## Autopilot and calendar ownership groundwork
+
+- [x] Store autopilot preferences with a namespaced owner ID and scope preference reads/updates through the verified principal's ownership filter; legacy Telegram preferences remain readable during migration.
+- [x] Scope calendar busy-time queries to the same principal, so another tenant's scheduled/published jobs do not occupy this tenant's slots.
+- [x] Keep the worker's enabled-user list Telegram-only until notification, account-token resolution, and job execution support web principals end-to-end.
+
+This is ownership groundwork, not browser autopilot support. Web dashboard actions, web timezone/account adapters, worker state transitions, and end-to-end scheduled publishing still require integration and tests before public multi-user publishing.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.

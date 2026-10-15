@@ -11,6 +11,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from . import service as svc
 from .policy import _aware, day_bounds, get_zone, in_quiet
+from .identity import Principal, owner_filter
 
 
 def _now():
@@ -22,8 +23,13 @@ class Calendar:
         self.jobs, self.autopilot, self.tz_for, self.clock = jobs, autopilot, tz_for, clock
 
     def _busy_times(self, telegram_id):
+        principal = (telegram_id if isinstance(telegram_id, Principal)
+                     else Principal.from_telegram(telegram_id))
         times = []
-        for j in self.jobs.find({"telegram_id": str(telegram_id)}):
+        query = owner_filter(principal)
+        if principal.kind == "telegram":
+            query = {"$and": [{"telegram_id": principal.subject}, query]}
+        for j in self.jobs.find(query):
             if j["status"] == svc.PUBLISHED and j.get("published_at"):
                 times.append(_aware(j["published_at"]))
             elif j["status"] in (svc.QUEUED, svc.RETRY, svc.RUNNING):
@@ -38,8 +44,10 @@ class Calendar:
         Optional aware local datetimes constrain the candidate window; normal
         callers can omit them and retain the original calendar behaviour.
         """
-        s = self.autopilot.get(telegram_id)
-        tz = get_zone(self.tz_for(telegram_id))
+        principal = (telegram_id if isinstance(telegram_id, Principal)
+                     else Principal.from_telegram(telegram_id))
+        s = self.autopilot.get(principal)
+        tz = get_zone(self.tz_for(principal.subject))
         now = self.clock()
         local_now = now.astimezone(tz)
         if not_before is not None:
