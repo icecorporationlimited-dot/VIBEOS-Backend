@@ -12,8 +12,9 @@ testable without MongoDB (see tests/test_phase1.py).
 import hashlib
 import io
 import logging
+import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import media_quality as mq
 from publishing.identity import Principal, owner_filter
@@ -43,6 +44,21 @@ class InvalidTransition(Exception):
 
 class MediaTooLarge(Exception):
     pass
+
+
+def _daily_upload_limit():
+    try:
+        return max(1, int(os.environ.get("USER_DAILY_UPLOADS", "300")))
+    except ValueError:
+        return 300
+
+
+class QuotaExceeded(MediaTooLarge):
+    """Per-user rolling 24h upload cap reached (protects shared storage/AI cost).
+
+    Subclasses MediaTooLarge so any existing caller that already skips oversized
+    media keeps working unchanged.
+    """
 
 
 def _now():
@@ -101,6 +117,22 @@ class ContentBuffer:
         self.assets.create_index([("telegram_id", 1), ("sha256", 1)])
         self.assets.create_index([("telegram_id", 1), ("batch_id", 1)])
         self.assets.create_index([("telegram_id", 1), ("status", 1)])
+        self.assets.create_index([("telegram_id", 1), ("created_at", 1)])
+
+    # ---- quota -----------------------------------------------------------
+    def _check_quota(self, owner):
+        """Raise QuotaExceeded if this user already added too many assets in 24h.
+
+        Counts only this user's rows, so one user can never use up another's
+        allowance. Skipped for stores without count_documents (test doubles).
+        """
+        count = getattr(self.assets, "count_documents", None)
+        if count is None:
+            return
+        since = _now() - timedelta(hours=24)
+        used = count({"telegram_id": owner, "created_at": {"$gte": since}})
+        if used >= _daily_upload_limit():
+            raise QuotaExceeded("daily upload limit reached")
 
     # ---- intake ----------------------------------------------------------
     def add_asset(self, user_id, data: bytes, kind="photo", batch_id=None,
@@ -126,6 +158,7 @@ class ContentBuffer:
         if existing:
             return {"asset": existing, "duplicate": True}
 
+        self._check_quota(owner)
         blob_id = self.blobs.put(data, filename=filename)
         now = _now()
         doc = {
@@ -166,6 +199,7 @@ class ContentBuffer:
             "status": {"$in": [UPLOADED, ANALYZED, SELECTED, READY]}})
         if existing:
             return {"asset": existing, "duplicate": True}
+        self._check_quota(owner)
         blob_id = self.blobs.put(data, filename=f"reel_{digest[:12]}.mp4")
         now = _now()
         doc = {
@@ -457,10 +491,13 @@ class ContentBuffer:
     # ---- one-call pipeline ----------------------------------------------
     def process_batch(self, user_id, batch_id, photos, n=3) -> dict:
         """photos: list of (bytes, filename). Intake -> analyze -> shortlist."""
-        added, duplicates, too_large = [], 0, 0
+        added, duplicates, too_large, quota_blocked = [], 0, 0, 0
         for data, filename in photos:
             try:
                 res = self.add_asset(user_id, data, "photo", batch_id, filename)
+            except QuotaExceeded:
+                quota_blocked += 1
+                continue
             except MediaTooLarge:
                 too_large += 1
                 continue
@@ -472,5 +509,6 @@ class ContentBuffer:
         self.analyze_batch(user_id, batch_id)
         report = self.select_shortlist(user_id, batch_id, n=n)
         report.update({"added": added, "exact_duplicates": duplicates,
-                       "too_large": too_large})
+                       "too_large": too_large,
+                       "quota_blocked": quota_blocked})
         return report

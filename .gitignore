@@ -1,4 +1,5 @@
-settings.py
 __pycache__/
 *.pyc
 .pytest_cache/
+settings_local.py
+.env

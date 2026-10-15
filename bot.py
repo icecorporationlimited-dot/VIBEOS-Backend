@@ -27,6 +27,7 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
+    TypeHandler,
     filters,
 )
 from telegram.request import HTTPXRequest
@@ -36,6 +37,7 @@ from editor import edit_photo
 from content_buffer import ContentBuffer, GridFSBlobStore
 import memory
 import publish_bot
+from ratelimit import make_gate
 from publishing.autopilot import AutopilotStore
 
 # =========================================================
@@ -1141,6 +1143,11 @@ def buffer_filter(user_id, batch_key, downloaded, n=None):
         lines.append(
             f"{report['exact_duplicates']} already in your buffer"
         )
+    if report.get("quota_blocked"):
+        lines.append(
+            f"⚠️ Daily upload limit reached: {report['quota_blocked']} "
+            "photo(s) were not added. Try again tomorrow."
+        )
     return shortlist, "\n".join(lines)
 
 
@@ -2135,6 +2142,10 @@ def main():
         .post_shutdown(_on_shutdown)
         .build()
     )
+
+    # Abuse protection: runs before every other handler (group -1) and only
+    # blocks a user who exceeds the per-user limits. No feature is changed.
+    app.add_handler(TypeHandler(Update, make_gate()), group=-1)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("vibe", vibe_command))

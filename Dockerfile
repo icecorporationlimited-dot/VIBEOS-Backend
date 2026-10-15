@@ -14,6 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as a non-root user (limits damage if the bot is ever compromised).
+RUN useradd --create-home --uid 10001 vibeos && chown -R vibeos:vibeos /app
+USER vibeos
+
 # Render injects PORT at runtime; settings.py reads it.
 EXPOSE 10000
 CMD ["python", "main.py"]

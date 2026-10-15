@@ -1,4 +1,5 @@
 """publishing/config.py — reads the hardcoded values from settings.py."""
+import logging
 from dataclasses import dataclass
 
 
@@ -55,6 +56,12 @@ def load_config(env=None):
     if not base.startswith("https://"):
         # Meta requires HTTPS redirect URIs and Instagram fetches media by URL.
         raise ValueError("PUBLIC_BASE_URL must start with https://")
+    if len(env["PUBLISHING_SIGNING_SECRET"]) < 32:
+        # Weak HMAC key makes media/OAuth-state tokens guessable. Warn, don't
+        # crash, so an existing deployment keeps running while you rotate it.
+        logging.getLogger(__name__).warning(
+            "PUBLISHING_SIGNING_SECRET is shorter than 32 characters; "
+            "replace it with a long random value.")
     return PublishingConfig(
         app_id=env["META_APP_ID"],
         app_secret=env["META_APP_SECRET"],
