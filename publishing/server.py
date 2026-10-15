@@ -13,6 +13,7 @@ import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+from .web_routes import WebLoginRoutes
 
 from . import crypto
 from .oauth import OAuthError
@@ -29,10 +30,10 @@ def _render_page(title, body):
     return PAGE.format(title=html.escape(str(title)), body=html.escape(str(body)))
 
 
-def make_handler(cfg, oauth, accounts, blobs, notify):
+def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):   # keep tokens/codes out of logs
-            logger.info("http %s", args[0] if args else "")
+            logger.info("http %s %s", self.command, urlparse(self.path).path)
 
         def _send(self, status, body, ctype="text/html; charset=utf-8", extra=None):
             data = body.encode() if isinstance(body, str) else body
@@ -47,10 +48,10 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'none'; style-src 'unsafe-inline'; "
-                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
             )
             for k, v in (extra or {}).items():
-                self.send_header(k, v)
+                self.send_header("Set-Cookie" if k.startswith("Set-Cookie") else k, v)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
@@ -63,6 +64,15 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
             url = urlparse(self.path)
             if url.path == "/healthz":
                 return self._send(200, "ok", "text/plain")
+            if web_login is not None and url.path == "/login":
+                status, body, headers = web_login.login()
+                return self._send(status, body, extra=headers)
+            if web_login is not None and url.path == "/web":
+                status, body, headers = web_login.home(self.headers.get("Cookie", ""))
+                return self._send(status, body, extra=headers)
+            if web_login is not None and url.path == "/oidc/callback":
+                status, body, headers = web_login.callback(parse_qs(url.query))
+                return self._send(status, body, extra=headers)
             if url.path == "/oauth/callback":
                 return self._oauth(parse_qs(url.query))
             if url.path.startswith("/media/") and url.path.endswith(".jpg"):
@@ -70,6 +80,23 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
             if url.path.startswith("/media/") and url.path.endswith(".mp4"):
                 return self._media(url.path[len("/media/"):-len(".mp4")], "video/mp4")
             self._send(404, "not found", "text/plain")
+
+        def do_POST(self):
+            url = urlparse(self.path)
+            if web_login is None or url.path != "/logout":
+                return self._send(404, "not found", "text/plain")
+            if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/x-www-form-urlencoded":
+                return self._send(415, "unsupported media type", "text/plain")
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return self._send(400, "bad request", "text/plain")
+            if size < 0 or size > 8192:
+                return self._send(413, "request too large", "text/plain")
+            raw = self.rfile.read(size).decode("utf-8", "replace")
+            status, body, headers = web_login.logout(
+                self.headers.get("Cookie", ""), parse_qs(raw), self.headers.get("Origin", ""))
+            return self._send(status, body, extra=headers)
 
         def _oauth(self, q):
             first = lambda k: (q.get(k) or [""])[0]
@@ -136,9 +163,9 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
     return Handler
 
 
-def start_server(cfg, oauth, accounts, blobs, notify):
+def start_server(cfg, oauth, accounts, blobs, notify, web_login=None):
     httpd = ThreadingHTTPServer(("0.0.0.0", cfg.http_port),
-                                make_handler(cfg, oauth, accounts, blobs, notify))
+                                make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login))
     thread = threading.Thread(target=httpd.serve_forever, name="vibeos-http",
                               daemon=True)
     thread.start()
