@@ -33,6 +33,10 @@ def _clear_csrf_cookie():
     return f"{CSRF_COOKIE}=; Path=/; Secure; SameSite=Strict; Max-Age=0"
 
 
+def _clear_state_cookie():
+    return f"{OIDC_STATE_COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
+
+
 def _page(title, body):
     return (
         "<!doctype html><html><head><meta charset=utf-8>"
