@@ -10,6 +10,7 @@ from .web_auth import (
 )
 
 CSRF_COOKIE = "__Host-vibeos_csrf"
+OIDC_STATE_COOKIE = "vibeos_oidc_state"
 
 
 def _cookie_value(header, name):
