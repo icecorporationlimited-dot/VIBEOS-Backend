@@ -152,7 +152,12 @@ class AccountStore:
             logger.warning("Token refresh failed (will retry later): %s", exc)
             return token  # still valid for now; try again next call
         now = self.clock()
-        selector = {"_id": acct["_id"]} if "_id" in acct else self._filter_for(principal)
+        # Re-check ownership atomically at write time as well as at read time;
+        # an account ID alone is not an authorization boundary.
+        selector = {"$and": [
+            {"_id": acct["_id"]},
+            self._filter_for(principal),
+        ]} if "_id" in acct else self._filter_for(principal)
         self.col.update_one(
             selector,
             {"$set": {"token_enc": self.cipher.encrypt(fresh["access_token"]),
