@@ -8,6 +8,7 @@ publishing/server.py — tiny stdlib HTTPS-behind-proxy web server (own thread).
 Media URLs are signed + expire (default 1h) and only expose blobs we sign,
 so nobody can enumerate your photo library.
 """
+import html
 import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,6 +24,11 @@ PAGE = ("<!doctype html><meta name=viewport content='width=device-width'>"
         "<h2>{title}</h2><p>{body}</p></body>")
 
 
+def _render_page(title, body):
+    """Escape every dynamic value before inserting it into the HTML response."""
+    return PAGE.format(title=html.escape(str(title)), body=html.escape(str(body)))
+
+
 def make_handler(cfg, oauth, accounts, blobs, notify):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):   # keep tokens/codes out of logs
@@ -34,13 +40,24 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            )
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
 
-        do_HEAD = lambda self: self.do_GET()
+        def do_HEAD(self):
+            # Never route HEAD through GET: OAuth callbacks have side effects.
+            self._send(405, "method not allowed", "text/plain", {"Allow": "GET"})
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -57,28 +74,26 @@ def make_handler(cfg, oauth, accounts, blobs, notify):
         def _oauth(self, q):
             first = lambda k: (q.get(k) or [""])[0]
             if first("error"):
-                return self._send(400, PAGE.format(
-                    title="Connection cancelled",
-                    body="You can close this tab and run /connect again."))
+                return self._send(400, _render_page(
+                    "Connection cancelled",
+                    "You can close this tab and run /connect again."))
             try:
                 tg_id = oauth.telegram_id_from_state(first("state"))
                 token_info = oauth.exchange_code(first("code"))
                 acct = accounts.connect(tg_id, token_info)
             except OAuthError as exc:
-                return self._send(400, PAGE.format(title="Couldn't connect",
-                                                   body=str(exc)))
+                return self._send(400, _render_page("Couldn't connect", str(exc)))
             except Exception:
                 logger.exception("OAuth callback failed")
-                return self._send(500, PAGE.format(
-                    title="Something went wrong",
-                    body="Please run /connect again."))
+                return self._send(500, _render_page(
+                    "Something went wrong", "Please run /connect again."))
             try:
                 notify(tg_id, acct)
             except Exception:
                 logger.exception("Could not notify Telegram user")
-            self._send(200, PAGE.format(
-                title="Instagram connected ✅",
-                body=f"@{acct.get('username')} is linked. Go back to Telegram."))
+            self._send(200, _render_page(
+                "Instagram connected",
+                f"@{acct.get('username')} is linked. Go back to Telegram."))
 
         def _range(self, size):
             """Parse a single 'bytes=a-b' range; None = whole file, False = unsatisfiable."""
