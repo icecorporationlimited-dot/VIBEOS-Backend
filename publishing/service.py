@@ -42,6 +42,7 @@ except Exception:  # pymongo missing/stubbed (offline tests)
 from . import crypto
 from .accounts import NotConnected, ReauthRequired
 from .graph import GraphError
+from .identity import Principal, owner_filter
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,11 @@ def _now():
 
 def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _owned_query(principal, query):
+    """Combine a resource selector with the verified owner's filter."""
+    return {"$and": [query, owner_filter(principal)]}
 
 
 def build_caption(creative) -> str:
@@ -140,6 +146,7 @@ class PublishService:
     def ensure_indexes(self):
         self.jobs.create_index("idempotency_key", unique=True)
         self.jobs.create_index([("telegram_id", 1), ("created_at", -1)])
+        self.jobs.create_index([("owner_id", 1), ("created_at", -1)])
         self.jobs.create_index([("status", 1), ("next_attempt_at", 1)])
         self.jobs.create_index([("ig_user_id", 1), ("content_hash", 1)])
         self.jobs.create_index([("ig_user_id", 1), ("status", 1), ("published_at", -1)])
@@ -187,8 +194,9 @@ class PublishService:
 
         digests = []
         for aid in asset_ids:
-            asset = self.buffer.assets.find_one({"_id": aid,
-                                                  "telegram_id": str(telegram_id)})
+            asset = self.buffer.assets.find_one(
+                _owned_query(Principal.from_telegram(telegram_id), {"_id": aid})
+            )
             if not asset:
                 raise PublishError("Photo not found in your buffer.")
             if asset["status"] != "ready":
@@ -201,7 +209,8 @@ class PublishService:
         when = _aware(scheduled_at) if scheduled_at else now
         job = {
             "_id": uuid.uuid4().hex, "idempotency_key": key,
-            "telegram_id": str(telegram_id), "ig_user_id": acct["ig_user_id"],
+            "telegram_id": str(telegram_id), "owner_id": Principal.from_telegram(telegram_id).owner_id,
+            "ig_user_id": acct["ig_user_id"],
             "format": fmt, "asset_ids": asset_ids, "status": QUEUED,
             "attempts": 0, "container_id": None, "child_ids": [],
             "media_id": None, "permalink": None, "publish_started_at": None,
@@ -232,8 +241,9 @@ class PublishService:
     def retry(self, job_id, telegram_id):
         """User-triggered retry of a failed/retry/needs_reauth job."""
         res = self.jobs.update_one(
-            {"_id": job_id, "telegram_id": str(telegram_id),
-             "status": {"$in": [RETRY, FAILED, NEEDS_REAUTH]}},
+            _owned_query(Principal.from_telegram(telegram_id), {
+                "_id": job_id, "telegram_id": str(telegram_id),
+                "status": {"$in": [RETRY, FAILED, NEEDS_REAUTH]}}),
             {"$set": {"status": QUEUED, "next_attempt_at": self.clock(),
                       "attempts": 0, "updated_at": self.clock()}})
         return res.matched_count == 1
@@ -241,15 +251,17 @@ class PublishService:
     def cancel(self, job_id, telegram_id):
         """User /cancel. Atomic vs. claiming: a job that already started can't be cancelled."""
         res = self.jobs.update_one(
-            {"_id": job_id, "telegram_id": str(telegram_id),
-             "status": {"$in": [QUEUED, RETRY, HELD, NEEDS_REAUTH]}},
+            _owned_query(Principal.from_telegram(telegram_id), {
+                "_id": job_id, "telegram_id": str(telegram_id),
+                "status": {"$in": [QUEUED, RETRY, HELD, NEEDS_REAUTH]}}),
             {"$set": {"status": CANCELLED, "updated_at": self.clock()}})
         return res.matched_count == 1
 
     def release(self, job_id, telegram_id):
         """User /release: let a HELD job through the topic/format checks (not duplicates)."""
         res = self.jobs.update_one(
-            {"_id": job_id, "telegram_id": str(telegram_id), "status": HELD},
+            _owned_query(Principal.from_telegram(telegram_id), {
+                "_id": job_id, "telegram_id": str(telegram_id), "status": HELD}),
             {"$set": {"status": QUEUED, "policy_override": True, "hold_reason": None,
                       "notified": None, "next_attempt_at": self.clock(),
                       "updated_at": self.clock()}})
@@ -257,7 +269,7 @@ class PublishService:
 
     def queue(self, telegram_id):
         """Everything not finished, soonest first (for /queue)."""
-        rows = [j for j in self.jobs.find({"telegram_id": str(telegram_id)})
+        rows = [j for j in self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
                 if j["status"] in PENDING]
         return sorted(rows, key=lambda j: _aware(j.get("next_attempt_at") or j["created_at"]))
 
@@ -265,7 +277,7 @@ class PublishService:
         prefix = (prefix or "").strip().lower()
         if not prefix:
             return []
-        return [j for j in self.jobs.find({"telegram_id": str(telegram_id)})
+        return [j for j in self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
                 if j["_id"].startswith(prefix)]
 
     # ---- running jobs ----------------------------------------------------
@@ -375,7 +387,9 @@ class PublishService:
 
         assets = []
         for aid in job["asset_ids"]:
-            asset = self.buffer.assets.find_one({"_id": aid})
+            asset = self.buffer.assets.find_one(
+                _owned_query(Principal.from_telegram(job["telegram_id"]), {"_id": aid})
+            )
             if not asset or asset["status"] != "ready":
                 raise PublishError("Photo is no longer publish-ready.")
             assets.append(asset)
@@ -497,11 +511,12 @@ class PublishService:
                   last_error=None, published_at=self.clock())
         for aid in job["asset_ids"]:
             self.buffer.assets.update_one(
-                {"_id": aid}, {"$set": {"last_published_at": self.clock()}})
+                _owned_query(Principal.from_telegram(job["telegram_id"]), {"_id": aid}),
+                {"$set": {"last_published_at": self.clock()}})
 
     # ---- queries ---------------------------------------------------------
     def recent_jobs(self, telegram_id, limit=5):
-        rows = self.jobs.find({"telegram_id": str(telegram_id)})
+        rows = self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
         return sorted(rows, key=lambda j: j["created_at"], reverse=True)[:limit]
 
     def due_jobs(self):
