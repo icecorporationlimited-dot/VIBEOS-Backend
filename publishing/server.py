@@ -11,6 +11,7 @@ so nobody can enumerate your photo library.
 import html
 import logging
 import threading
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 from .web_routes import WebLoginRoutes
@@ -30,7 +31,30 @@ def _render_page(title, body):
     return PAGE.format(title=html.escape(str(title)), body=html.escape(str(body)))
 
 
-def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
+def _web_media_response(web_login, content_buffer, cookie_header, asset_id, variant):
+    """Return owner-scoped browser media only for a valid web session."""
+    if web_login is None or content_buffer is None:
+        return 404, b"not found", "text/plain"
+    jar = SimpleCookie()
+    try:
+        jar.load(cookie_header or "")
+    except Exception:
+        return 404, b"not found", "text/plain"
+    session_cookie = jar.get("__Host-vibeos_session")
+    principal = web_login.sessions.resolve(session_cookie.value if session_cookie else "")
+    if principal is None or variant not in {"original", "post", "story", "reel"}:
+        return 404, b"not found", "text/plain"
+    try:
+        data = content_buffer.get_media_for(
+            principal, asset_id, None if variant == "original" else variant
+        )
+    except Exception:
+        # Keep missing, cross-tenant, and unavailable assets indistinguishable.
+        return 404, b"not found", "text/plain"
+    return 200, data, "video/mp4" if variant == "reel" else "image/jpeg"
+
+
+def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):   # keep tokens/codes out of logs
             logger.info("http %s %s", self.command, urlparse(self.path).path)
@@ -70,6 +94,14 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
             if web_login is not None and url.path == "/web":
                 status, body, headers = web_login.home(self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
+            if url.path.startswith("/web/media/"):
+                parts = url.path.split("/")
+                if len(parts) != 5 or not parts[3] or not parts[4]:
+                    return self._send(404, "not found", "text/plain")
+                status, data, ctype = _web_media_response(
+                    web_login, content_buffer, self.headers.get("Cookie", ""),
+                    parts[3], parts[4])
+                return self._send(status, data, ctype)
             if web_login is not None and url.path == "/oidc/callback":
                 status, body, headers = web_login.callback(parse_qs(url.query), self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
@@ -171,9 +203,9 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
     return Handler
 
 
-def start_server(cfg, oauth, accounts, blobs, notify, web_login=None):
+def start_server(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None):
     httpd = ThreadingHTTPServer(("0.0.0.0", cfg.http_port),
-                                make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login))
+                                make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login, content_buffer=content_buffer))
     thread = threading.Thread(target=httpd.serve_forever, name="vibeos-http",
                               daemon=True)
     thread.start()
