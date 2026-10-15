@@ -159,6 +159,24 @@ class PublishService:
         # adapter; bare IDs remain the Telegram compatibility interface.
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
+    @staticmethod
+    def _telegram_worker_eligible(job):
+        """Fail closed unless the job's owner and Telegram identity agree.
+
+        Legacy rows without owner_id remain eligible when they have a valid
+        Telegram ID. Namespaced rows must match that exact ID; a generic
+        'tg:' prefix is not enough to authorize execution.
+        """
+        telegram_id = job.get("telegram_id")
+        if telegram_id is None or str(telegram_id).strip() == "":
+            return False
+        try:
+            expected_owner = Principal.from_telegram(telegram_id).owner_id
+        except (TypeError, ValueError):
+            return False
+        owner_id = job.get("owner_id")
+        return owner_id is None or owner_id == expected_owner
+
     def media_url(self, blob_id, ext="jpg") -> str:
         token = crypto.sign(self.cfg.signing_secret, {"b": blob_id},
                             self.cfg.media_url_ttl)
@@ -307,9 +325,8 @@ class PublishService:
         if job is None:
             return None
         # The current worker resolves accounts and assets through Telegram IDs.
-        # Fail closed for web/unknown owners until a tenant-aware worker is wired.
-        owner_id = job.get("owner_id")
-        if not job.get("telegram_id") or (owner_id and not str(owner_id).startswith("tg:")):
+        # Fail closed for web/unknown owners and inconsistent legacy mappings.
+        if not self._telegram_worker_eligible(job):
             return job
         if self._claimable(job):
             blocked = self._gate_decision(job)          # before we touch Instagram
@@ -538,10 +555,9 @@ class PublishService:
         now = self.clock()
         rows = []
         for j in self.jobs.find({"status": {"$in": [QUEUED, RETRY, RUNNING]}}):
-            # This polling worker is Telegram-only. Never surface a web-owned
-            # job to it until account, media, and state transitions are tenant-aware.
-            owner_id = j.get("owner_id")
-            if not j.get("telegram_id") or (owner_id and not str(owner_id).startswith("tg:")):
+            # This polling worker is Telegram-only. Never surface web-owned,
+            # unknown-owner, or identity-mismatched jobs to it.
+            if not self._telegram_worker_eligible(j):
                 continue
             if j["status"] == RUNNING:
                 lease = j.get("lease_until")

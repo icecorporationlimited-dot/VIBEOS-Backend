@@ -47,6 +47,7 @@ The worker execution loop still uses Telegram account resolution and internal jo
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.
 - [ ] Make publishing jobs, assets/media, autopilot preferences, slots, retries, cancellation, and account lifecycle operations tenant-scoped end-to-end.
 - [x] Keep the current Telegram-only worker fail-closed: due-job polling and direct execution skip web/unknown-owner jobs until tenant-aware account/media/state transitions are implemented.
+- [x] Require namespaced Telegram job ownership to exactly match the job's Telegram ID; reject malformed IDs and mismatched owner/identity pairs in both polling and direct execution.
 - [x] Re-check the account owner in the atomic token-refresh update instead of trusting an account document ID alone.
 - [ ] Complete tenant-aware worker account/media resolution and owner-scoped state transitions before enabling web publishing.
 - [ ] Add rate limits and operational abuse controls to login and OAuth endpoints.
