@@ -14,15 +14,16 @@ import numpy as np
 from PIL import Image, ImageOps
 
 ANALYSIS_SIDE = 512          # all measurements are done at this size
-MIN_SHORT_SIDE = 720         # below this the post looks soft on Instagram
-BLUR_THRESHOLD = 40.0        # sharpness (tile Laplacian variance) below = blurry
-DARK_THRESHOLD = 55.0        # mean luma (0-255)
-BRIGHT_THRESHOLD = 205.0
+MIN_SHORT_SIDE = 720         # soft ranking hint, not an automatic rejection
+BLUR_THRESHOLD = 40.0        # soft-focus hint, not an automatic rejection
+DARK_THRESHOLD = 55.0        # mean luma (0-255); underexposure hint
+BRIGHT_THRESHOLD = 205.0     # overexposure hint
 LOW_CONTRAST_STD = 28.0
 DUPLICATE_DISTANCE = 6       # dHash hamming distance <= this -> duplicate
 SIMILAR_DISTANCE = 12        # <= this -> too similar to shortlist twice
 
-HARD_ISSUES = {"too_small", "blurry", "too_dark", "too_bright", "unreadable"}
+# Reject only files that cannot be decoded. Other quality problems are ranking hints.
+HARD_ISSUES = {"unreadable"}
 
 _LUMA = np.array([0.299, 0.587, 0.114], dtype=np.float32)
 
@@ -116,14 +117,16 @@ def analyze_image(image_bytes) -> dict:
     clipped_highlights = float((gray > 247).mean())
 
     issues, notes = [], []
+    # Technical quality signals lower the ranking, but should not discard an
+    # otherwise usable image before VIBEOS can shortlist or enhance it.
     if min(width, height) < MIN_SHORT_SIDE:
-        issues.append("too_small")
+        notes.append("too_small")
     if sharpness < BLUR_THRESHOLD:
-        issues.append("blurry")
+        notes.append("blurry")
     if brightness < DARK_THRESHOLD:
-        issues.append("too_dark")
+        notes.append("too_dark")
     if brightness > BRIGHT_THRESHOLD:
-        issues.append("too_bright")
+        notes.append("too_bright")
     if contrast < LOW_CONTRAST_STD:
         notes.append("low_contrast")
     if clipped_highlights > 0.15:
@@ -138,7 +141,13 @@ def analyze_image(image_bytes) -> dict:
     s_expo = _clamp(1 - abs(brightness - 128) / 100.0) * 25
     s_contrast = _clamp(contrast / 60.0) * 15
     s_res = _clamp(min(width, height) / 1080.0) * 20
-    penalty = 15 * len(notes)
+    # Keep soft technical warnings meaningful without letting several fixable
+    # issues collapse every image to zero. The component scores already account
+    # for sharpness, exposure and resolution, so these are modest extra penalties.
+    technical_notes = {"too_small", "blurry", "too_dark", "too_bright", "low_contrast", "blown_highlights"}
+    technical_penalty = 5 * sum(note in technical_notes for note in notes)
+    presentation_penalty = 5 * sum(note not in technical_notes for note in notes)
+    penalty = technical_penalty + presentation_penalty
     quality = int(round(_clamp((s_sharp + s_expo + s_contrast + s_res - penalty) / 100.0) * 100))
 
     return {
