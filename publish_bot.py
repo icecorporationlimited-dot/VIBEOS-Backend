@@ -35,6 +35,10 @@ from publishing.crypto import TokenCipher
 from publishing.graph import GraphClient
 from publishing.oauth import InstagramOAuth
 from publishing.server import start_server
+from publishing.oidc import OIDCLogin
+from publishing.web_auth import WebSessionStore
+from publishing.web_routes import WebLoginRoutes
+from publishing.web_config import load_web_auth_settings
 from publishing.service import PublishService, PublishError
 from publishing.accounts import NotConnected
 
@@ -121,7 +125,23 @@ def build_runtime(db, content_buffer, bot_token):
                     refresh_days=cfg.refresh_before_days, planner=planner,
                     trend_cfg=trend_cfg)
 
-    httpd = start_server(cfg, oauth, accounts, content_buffer.blobs, notify)
+    web_login = None
+    web_auth_cfg = load_web_auth_settings()
+    if web_auth_cfg:
+        web_users = db["web_users"]
+        oidc = OIDCLogin(
+            web_auth_cfg["issuer"], web_auth_cfg["client_id"],
+            web_auth_cfg["client_secret"], cfg.public_base_url.rstrip("/") + "/oidc/callback",
+            db["oidc_login_transactions"], web_users,
+        )
+        sessions = WebSessionStore(db["web_sessions"], web_users)
+        oidc.ensure_indexes()
+        sessions.ensure_indexes()
+        web_login = WebLoginRoutes(cfg, oidc, sessions)
+
+    httpd = start_server(
+        cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login
+    )
     return Runtime(cfg, oauth, accounts, service, httpd,
                    autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for)
 
