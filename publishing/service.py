@@ -194,13 +194,27 @@ class PublishService:
     # ---- creating jobs ---------------------------------------------------
     def enqueue(self, telegram_id, asset_ids, fmt, scheduled_at=None,
                 source="manual", revive=False) -> dict:
-        """Create (or return the existing) job. Raises PublishError/NotConnected.
+        """Backward-compatible Telegram enqueue entry point."""
+        return self.enqueue_for(
+            Principal.from_telegram(telegram_id), asset_ids, fmt,
+            scheduled_at=scheduled_at, source=source, revive=revive,
+        )
 
-        scheduled_at  run no earlier than this (tz-aware UTC). None = as soon as possible.
-        source        "manual" (user tapped Post) or "scheduled" (calendar/autopilot).
-                      Manual jobs skip quiet hours / daily limits, never the safety checks.
-        revive        a previously /cancel-led identical job is queued again.
+    def enqueue_for(self, principal, asset_ids, fmt, scheduled_at=None,
+                    source="manual", revive=False) -> dict:
+        """Create a job for one verified principal.
+
+        This is an owner-aware service primitive, not a switch that enables web
+        publishing. The current background worker deliberately remains
+        Telegram-only until browser notifications and the complete web publish
+        lifecycle are integrated and tested.
+
+        scheduled_at  run no earlier than this (tz-aware UTC). None = ASAP.
+        source        "manual" or "scheduled".
+        revive        re-queue a previously cancelled identical job.
         """
+        if not isinstance(principal, Principal):
+            raise TypeError("A verified Principal is required.")
         if fmt not in FORMATS:
             raise PublishError(f"Unknown format: {fmt}")
         asset_ids = list(asset_ids)
@@ -212,14 +226,14 @@ class PublishService:
         if len(set(asset_ids)) != len(asset_ids):
             raise PublishError("The same photo was selected twice.")
 
-        acct = self.accounts.get(telegram_id)
+        acct = self.accounts.get_for(principal)
         if not acct or acct.get("status") == "disconnected":
             raise NotConnected("No Instagram account connected. Use /connect.")
 
         digests = []
         for aid in asset_ids:
             asset = self.buffer.assets.find_one(
-                _owned_query(Principal.from_telegram(telegram_id), {"_id": aid})
+                _owned_query(principal, {"_id": aid})
             )
             if not asset:
                 raise PublishError("Photo not found in your buffer.")
@@ -227,13 +241,15 @@ class PublishService:
                 raise PublishError("Only publish-ready photos can be posted.")
             digests.append(asset.get("sha256") or aid)
 
-        key = f"{acct['ig_user_id']}:{fmt}:" + ",".join(sorted(asset_ids))
+        # Include the tenant in the key: deduplication must not turn into a
+        # cross-owner lookup if account IDs or asset identifiers are reused.
+        key = f"{principal.owner_id}:{acct['ig_user_id']}:{fmt}:" + ",".join(sorted(asset_ids))
         content_hash = hashlib.sha256(",".join(sorted(digests)).encode()).hexdigest()
         now = self.clock()
         when = _aware(scheduled_at) if scheduled_at else now
         job = {
             "_id": uuid.uuid4().hex, "idempotency_key": key,
-            "telegram_id": str(telegram_id), "owner_id": Principal.from_telegram(telegram_id).owner_id,
+            "owner_id": principal.owner_id,
             "ig_user_id": acct["ig_user_id"],
             "format": fmt, "asset_ids": asset_ids, "status": QUEUED,
             "attempts": 0, "container_id": None, "child_ids": [],
@@ -243,18 +259,27 @@ class PublishService:
             "content_hash": content_hash, "hold_reason": None, "notified": None,
             "created_at": now, "updated_at": now,
         }
+        if principal.kind == "telegram":
+            # Keep legacy fields for Telegram consumers while the worker migrates.
+            job["telegram_id"] = principal.subject
         try:
             self.jobs.insert_one(job)
         except DuplicateKeyError:
-            existing = self.jobs.find_one({"idempotency_key": key})
+            existing = self.jobs.find_one(_owned_query(
+                principal, {"idempotency_key": key}
+            ))
+            if not existing:
+                raise
             if revive and existing["status"] == CANCELLED:
                 self.jobs.update_one(
-                    {"_id": existing["_id"], "status": CANCELLED},
+                    _owned_query(principal, {"_id": existing["_id"], "status": CANCELLED}),
                     {"$set": {"status": QUEUED, "attempts": 0, "next_attempt_at": when,
                               "scheduled_at": when if scheduled_at else None,
                               "source": source, "hold_reason": None, "notified": None,
                               "last_error": None, "updated_at": now}})
-                existing = self.jobs.find_one({"_id": existing["_id"]})
+                existing = self.jobs.find_one(_owned_query(
+                    principal, {"_id": existing["_id"]}
+                ))
                 existing["duplicate"] = False
                 return existing
             existing["duplicate"] = True
