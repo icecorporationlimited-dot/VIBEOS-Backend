@@ -146,6 +146,7 @@ class PublishService:
     def ensure_indexes(self):
         self.jobs.create_index("idempotency_key", unique=True)
         self.jobs.create_index([("telegram_id", 1), ("created_at", -1)])
+        self.jobs.create_index([("owner_id", 1), ("created_at", -1)])
         self.jobs.create_index([("status", 1), ("next_attempt_at", 1)])
         self.jobs.create_index([("ig_user_id", 1), ("content_hash", 1)])
         self.jobs.create_index([("ig_user_id", 1), ("status", 1), ("published_at", -1)])
@@ -276,7 +277,7 @@ class PublishService:
         prefix = (prefix or "").strip().lower()
         if not prefix:
             return []
-        return [j for j in self.jobs.find({"telegram_id": str(telegram_id)})
+        return [j for j in self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
                 if j["_id"].startswith(prefix)]
 
     # ---- running jobs ----------------------------------------------------
@@ -514,7 +515,7 @@ class PublishService:
 
     # ---- queries ---------------------------------------------------------
     def recent_jobs(self, telegram_id, limit=5):
-        rows = self.jobs.find({"telegram_id": str(telegram_id)})
+        rows = self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
         return sorted(rows, key=lambda j: j["created_at"], reverse=True)[:limit]
 
     def due_jobs(self):
