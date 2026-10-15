@@ -12,6 +12,13 @@ This document tracks the security boundary required before enabling public multi
 - [x] Support deployment environment variables for OIDC credentials.
 - [x] Add owner-scoped Instagram account storage methods while preserving Telegram entry points.
 
+## Tenant-scoped media access groundwork
+
+- [x] Add `ContentBuffer.get_media_for(principal, asset_id, variant=None)`, which scopes asset lookup through the verified principal's owner filter and returns a generic not-found result for inaccessible IDs.
+- [x] Add regression tests for cross-web-user denial, web-vs-Telegram separation, legacy Telegram compatibility, and requiring a verified `Principal`.
+
+This is only a safe access primitive. Existing internal `get_media(asset_id)` remains for trusted legacy callers, and the browser media route has not been migrated to this helper in this change. Do not enable public web publishing based on this step alone.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.
