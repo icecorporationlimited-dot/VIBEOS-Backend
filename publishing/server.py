@@ -71,7 +71,7 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
                 status, body, headers = web_login.home(self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
             if web_login is not None and url.path == "/oidc/callback":
-                status, body, headers = web_login.callback(parse_qs(url.query))
+                status, body, headers = web_login.callback(parse_qs(url.query), self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
             if url.path == "/oauth/callback":
                 return self._oauth(parse_qs(url.query))
