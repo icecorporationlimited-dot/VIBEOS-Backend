@@ -306,6 +306,11 @@ class PublishService:
         job = self.jobs.find_one({"_id": job_id})
         if job is None:
             return None
+        # The current worker resolves accounts and assets through Telegram IDs.
+        # Fail closed for web/unknown owners until a tenant-aware worker is wired.
+        owner_id = job.get("owner_id")
+        if not job.get("telegram_id") or (owner_id and not str(owner_id).startswith("tg:")):
+            return job
         if self._claimable(job):
             blocked = self._gate_decision(job)          # before we touch Instagram
             if blocked is not None:
@@ -533,6 +538,11 @@ class PublishService:
         now = self.clock()
         rows = []
         for j in self.jobs.find({"status": {"$in": [QUEUED, RETRY, RUNNING]}}):
+            # This polling worker is Telegram-only. Never surface a web-owned
+            # job to it until account, media, and state transitions are tenant-aware.
+            owner_id = j.get("owner_id")
+            if not j.get("telegram_id") or (owner_id and not str(owner_id).startswith("tg:")):
+                continue
             if j["status"] == RUNNING:
                 lease = j.get("lease_until")
                 if lease is None or _aware(lease) >= now:
