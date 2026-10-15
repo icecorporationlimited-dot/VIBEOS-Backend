@@ -42,6 +42,15 @@ This is ownership groundwork, not browser autopilot support. Web dashboard actio
 
 The worker execution loop still uses Telegram account resolution and internal job-ID transitions. This PR does not make web jobs executable and does not replace the separate signed media-URL review. Do not enable public multi-user publishing until worker claim/state transitions and account lifecycle integration are fully audited.
 
+## Principal-scoped enqueue groundwork (PR #16)
+
+- [x] Add `PublishService.enqueue_for(principal, ...)` so account and asset reads use the same verified principal.
+- [x] Include the namespaced owner ID in the idempotency key and scope duplicate-job lookup/revival to that owner.
+- [x] Preserve the legacy Telegram `enqueue()` entry point and `telegram_id` field.
+- [x] Add regression coverage for web-owner asset isolation and Telegram compatibility.
+
+This is only the enqueue primitive. The scheduler and execution path remain Telegram-only and must continue to reject web-owned jobs. Do not expose browser-side publishing or enable web jobs until tenant-aware token/media resolution, state transitions, browser-safe outcome reporting, and end-to-end tests are complete.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.
