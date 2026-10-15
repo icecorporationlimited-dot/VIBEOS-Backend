@@ -153,6 +153,12 @@ class PublishService:
         self.events.create_index([("job_id", 1), ("at", 1)])
 
     # ---- helpers ---------------------------------------------------------
+    @staticmethod
+    def _principal(identity):
+        # Web callers must pass a Principal created by the validated session
+        # adapter; bare IDs remain the Telegram compatibility interface.
+        return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
+
     def media_url(self, blob_id, ext="jpg") -> str:
         token = crypto.sign(self.cfg.signing_secret, {"b": blob_id},
                             self.cfg.media_url_ttl)
@@ -239,37 +245,38 @@ class PublishService:
         return job
 
     def retry(self, job_id, telegram_id):
-        """User-triggered retry of a failed/retry/needs_reauth job."""
+        """Retry a job only when it belongs to the supplied verified principal."""
+        principal = self._principal(telegram_id)
         res = self.jobs.update_one(
-            _owned_query(Principal.from_telegram(telegram_id), {
-                "_id": job_id, "telegram_id": str(telegram_id),
-                "status": {"$in": [RETRY, FAILED, NEEDS_REAUTH]}}),
+            _owned_query(principal, {
+                "_id": job_id, "status": {"$in": [RETRY, FAILED, NEEDS_REAUTH]}}),
             {"$set": {"status": QUEUED, "next_attempt_at": self.clock(),
                       "attempts": 0, "updated_at": self.clock()}})
         return res.matched_count == 1
 
     def cancel(self, job_id, telegram_id):
-        """User /cancel. Atomic vs. claiming: a job that already started can't be cancelled."""
+        """Atomically cancel an eligible job owned by this principal."""
+        principal = self._principal(telegram_id)
         res = self.jobs.update_one(
-            _owned_query(Principal.from_telegram(telegram_id), {
-                "_id": job_id, "telegram_id": str(telegram_id),
-                "status": {"$in": [QUEUED, RETRY, HELD, NEEDS_REAUTH]}}),
+            _owned_query(principal, {
+                "_id": job_id, "status": {"$in": [QUEUED, RETRY, HELD, NEEDS_REAUTH]}}),
             {"$set": {"status": CANCELLED, "updated_at": self.clock()}})
         return res.matched_count == 1
 
     def release(self, job_id, telegram_id):
-        """User /release: let a HELD job through the topic/format checks (not duplicates)."""
+        """Release a held job only for its owner (not a duplicate job)."""
+        principal = self._principal(telegram_id)
         res = self.jobs.update_one(
-            _owned_query(Principal.from_telegram(telegram_id), {
-                "_id": job_id, "telegram_id": str(telegram_id), "status": HELD}),
+            _owned_query(principal, {"_id": job_id, "status": HELD}),
             {"$set": {"status": QUEUED, "policy_override": True, "hold_reason": None,
                       "notified": None, "next_attempt_at": self.clock(),
                       "updated_at": self.clock()}})
         return res.matched_count == 1
 
     def queue(self, telegram_id):
-        """Everything not finished, soonest first (for /queue)."""
-        rows = [j for j in self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
+        """List pending jobs belonging only to this principal."""
+        principal = self._principal(telegram_id)
+        rows = [j for j in self.jobs.find(_owned_query(principal, {}))
                 if j["status"] in PENDING]
         return sorted(rows, key=lambda j: _aware(j.get("next_attempt_at") or j["created_at"]))
 
@@ -277,7 +284,8 @@ class PublishService:
         prefix = (prefix or "").strip().lower()
         if not prefix:
             return []
-        return [j for j in self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
+        principal = self._principal(telegram_id)
+        return [j for j in self.jobs.find(_owned_query(principal, {}))
                 if j["_id"].startswith(prefix)]
 
     # ---- running jobs ----------------------------------------------------
