@@ -145,7 +145,8 @@ def build_runtime(db, content_buffer, bot_token):
         web_login = WebLoginRoutes(cfg, oidc, sessions, instagram_connect, accounts)
 
     httpd = start_server(
-        cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login
+        cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
+        content_buffer=content_buffer,
     )
     return Runtime(cfg, oauth, accounts, service, httpd,
                    autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for)
