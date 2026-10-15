@@ -4,13 +4,15 @@ This increment exposes a minimal browser login flow through the existing publish
 
 ## Configure
 
-In `settings.py`, set these values to your identity provider's exact values:
+For production, set these deployment environment variables using your hosting platform's secret/configuration settings:
 
-- `OIDC_ISSUER`: HTTPS issuer URL
+- `OIDC_ISSUER`: exact HTTPS issuer URL
 - `OIDC_CLIENT_ID`: registered client ID
-- `OIDC_CLIENT_SECRET`: client secret
+- `OIDC_CLIENT_SECRET`: client secret (keep it in deployment secrets)
 
-Register `https://YOUR_PUBLIC_HOST/oidc/callback` as the exact redirect URI. Keep the provider secret out of source control in production; use your host's secret-management facility. The existing publishing server still requires its Meta publishing configuration and HTTPS public base URL to start.
+Environment variables take precedence over matching values in `settings.py`. For local development, the three values may still be set in `settings.py`. Configure all three together; a partial configuration fails closed.
+
+Register `https://YOUR_PUBLIC_HOST/oidc/callback` as the exact redirect URI. The existing publishing server still requires its Meta publishing configuration and HTTPS public base URL to start.
 
 ## Routes
 
