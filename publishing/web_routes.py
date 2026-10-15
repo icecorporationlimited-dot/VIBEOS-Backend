@@ -59,7 +59,12 @@ class WebLoginRoutes:
 
     def login(self):
         try:
-            return 302, "", {"Location": self.oidc.begin()}
+            url = self.oidc.begin()
+            state = (parse_qs(urlparse(url).query).get("state") or [""])[0]
+            if not state:
+                raise OIDCError("OIDC URL missing state.")
+            cookie = f"{OIDC_STATE_COOKIE}={state}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600"
+            return 302, "", {"Location": url, "Set-Cookie-2": cookie}
         except Exception:
             return 503, _page("Login unavailable", "<p>Please try again later.</p>"), {}
 
