@@ -38,6 +38,7 @@ from publishing.server import start_server
 from publishing.oidc import OIDCLogin
 from publishing.web_auth import WebSessionStore
 from publishing.web_routes import WebLoginRoutes
+from publishing.web_instagram import WebInstagramConnect
 from publishing.web_config import load_web_auth_settings
 from publishing.service import PublishService, PublishError
 from publishing.accounts import NotConnected
@@ -137,7 +138,11 @@ def build_runtime(db, content_buffer, bot_token):
         sessions = WebSessionStore(db["web_sessions"], web_users)
         oidc.ensure_indexes()
         sessions.ensure_indexes()
-        web_login = WebLoginRoutes(cfg, oidc, sessions)
+        instagram_connect = WebInstagramConnect(
+            cfg, oauth, accounts, sessions, db["web_ig_oauth_transactions"]
+        )
+        instagram_connect.ensure_indexes()
+        web_login = WebLoginRoutes(cfg, oidc, sessions, instagram_connect, accounts)
 
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login
