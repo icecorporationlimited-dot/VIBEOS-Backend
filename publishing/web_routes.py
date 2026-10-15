@@ -87,9 +87,9 @@ class WebLoginRoutes:
             }
             return 303, "", headers
         except (OIDCError, ValueError):
-            return 400, _page("Sign-in failed", "<p>Please start again from the login page.</p>"), {}
+            return 400, _page("Sign-in failed", "<p>Please start again from the login page.</p>"), {"Set-Cookie-3": _clear_state_cookie()}
         except Exception:
-            return 500, _page("Sign-in failed", "<p>Please try again later.</p>"), {}
+            return 500, _page("Sign-in failed", "<p>Please try again later.</p>"), {"Set-Cookie-3": _clear_state_cookie()}
 
     def home(self, cookie_header):
         token = _cookie_value(cookie_header, SESSION_COOKIE)
