@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from content_buffer import ContentBuffer, MemoryBlobStore
 from publishing.accounts import AccountStore, NotConnected
 from publishing.identity import Principal
-from publishing.service import PublishService, QUEUED
+from publishing.service import PublishError, PublishService, QUEUED
 
 
 def matches(doc, query):
@@ -139,6 +139,47 @@ class MultiUserSecurityE2ETests(unittest.TestCase):
         self.assertTrue(service.cancel("alice-job", self.alice))
         self.assertFalse(service.cancel("bob-job", self.alice))
         self.assertEqual(jobs.find_one({"_id": "bob-job"})["status"], QUEUED)
+
+    def test_enqueue_for_scopes_account_and_assets_to_principal(self):
+        assets = FakeCollection([
+            {"_id": "alice-asset", "owner_id": "web:alice", "status": "ready",
+             "sha256": "alice-hash", "creative": {"caption": "Alice"}},
+            {"_id": "bob-asset", "owner_id": "web:bob", "status": "ready",
+             "sha256": "bob-hash", "creative": {"caption": "Bob"}},
+        ])
+        buffer = ContentBuffer(assets, MemoryBlobStore())
+        jobs = FakeCollection()
+        service = PublishService(
+            jobs, object(), buffer, self.accounts, object(), object(),
+            clock=lambda: self.now,
+        )
+
+        job = service.enqueue_for(self.alice, ["alice-asset"], "photo")
+        self.assertEqual(job["owner_id"], "web:alice")
+        self.assertNotIn("telegram_id", job)
+        self.assertEqual(job["ig_user_id"], "ig-alice-token")
+        self.assertTrue(job["idempotency_key"].startswith("web:alice:"))
+
+        with self.assertRaises(PublishError):
+            service.enqueue_for(self.bob, ["alice-asset"], "photo")
+        self.assertEqual(len(jobs.docs), 1)
+
+    def test_telegram_enqueue_compatibility_keeps_legacy_identity(self):
+        telegram = Principal.from_telegram("123")
+        self.accounts.connect_for(
+            telegram, {"access_token": "telegram-token", "expires_in": 30 * 86400}
+        )
+        assets = FakeCollection([
+            {"_id": "telegram-asset", "owner_id": "tg:123", "status": "ready",
+             "sha256": "telegram-hash", "creative": {"caption": "Telegram"}},
+        ])
+        service = PublishService(
+            FakeCollection(), object(), ContentBuffer(assets, MemoryBlobStore()),
+            self.accounts, object(), object(), clock=lambda: self.now,
+        )
+        job = service.enqueue("123", ["telegram-asset"], "photo")
+        self.assertEqual(job["owner_id"], "tg:123")
+        self.assertEqual(job["telegram_id"], "123")
 
     def test_telegram_worker_never_claims_web_owned_jobs(self):
         jobs = FakeCollection([
