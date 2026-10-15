@@ -96,8 +96,8 @@ class MultiUserSecurityE2ETests(unittest.TestCase):
         self.accounts = AccountStore(
             self.accounts_col, Cipher(), OAuth(), Graph(), clock=lambda: self.now
         )
-        self.accounts.connect_for(self.alice, {"access_token": "alice-token", "expires_in": 7200})
-        self.accounts.connect_for(self.bob, {"access_token": "bob-token", "expires_in": 7200})
+        self.accounts.connect_for(self.alice, {"access_token": "alice-token", "expires_in": 30 * 86400})
+        self.accounts.connect_for(self.bob, {"access_token": "bob-token", "expires_in": 30 * 86400})
 
     def test_account_tokens_are_isolated_between_web_users(self):
         self.assertEqual(self.accounts.get_token_for(self.alice)[1], "alice-token")
