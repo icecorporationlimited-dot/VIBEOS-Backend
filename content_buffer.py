@@ -4,7 +4,7 @@ content_buffer.py — Phase 1: Smart Content Buffer.
 Durable media storage + per-asset status tracking:
 
     uploaded -> analyzed -> selected -> ready
-                   \\-> rejected (blurry, dark, duplicate, ...)
+                   \\-> rejected (unreadable file, duplicate, ...)
 
 Everything here takes its collection/blob store by injection, so it is fully
 testable without MongoDB (see tests/test_phase1.py).
@@ -277,7 +277,11 @@ class ContentBuffer:
 
     # ---- analysis --------------------------------------------------------
     def analyze(self, asset_id) -> dict:
-        """uploaded -> analyzed (or rejected if it has a hard quality issue)."""
+        """uploaded -> analyzed; reject only unreadable/corrupt images at intake.
+
+    Fixable quality issues remain as ranking hints so the best available photos
+    can still be shortlisted and passed through adaptive editing.
+    """
         asset = self.assets.find_one({"_id": asset_id})
         if not asset:
             raise KeyError(f"Unknown asset {asset_id}")
@@ -315,7 +319,7 @@ class ContentBuffer:
         """Pick up to n best, mutually-different photos from a batch.
 
         Rules:
-          * only analyzed photos without hard issues
+          * only analyzed, readable photos (quality problems affect ranking, not eligibility)
           * drop near-identical copies (<= DUPLICATE_DISTANCE) -> rejected
           * drop photos nearly identical to something already selected/ready
             earlier -> rejected (never post the same picture twice)
