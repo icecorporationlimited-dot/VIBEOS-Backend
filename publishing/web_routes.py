@@ -2,7 +2,7 @@
 import html
 import hmac
 from http.cookies import SimpleCookie
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlparse
 
 from .oidc import OIDCError
 from .web_auth import (
