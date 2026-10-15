@@ -511,7 +511,8 @@ class PublishService:
                   last_error=None, published_at=self.clock())
         for aid in job["asset_ids"]:
             self.buffer.assets.update_one(
-                {"_id": aid}, {"$set": {"last_published_at": self.clock()}})
+                _owned_query(Principal.from_telegram(job["telegram_id"]), {"_id": aid}),
+                {"$set": {"last_published_at": self.clock()}})
 
     # ---- queries ---------------------------------------------------------
     def recent_jobs(self, telegram_id, limit=5):
