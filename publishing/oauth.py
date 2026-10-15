@@ -26,6 +26,18 @@ class InstagramOAuth:
         self.cfg = cfg
         self._client = GraphClient(http, cfg.graph_version)
 
+    def web_authorize_url(self, state: str) -> str:
+        """Build a browser connect URL using a server-stored one-time state."""
+        if not isinstance(state, str) or not state or len(state) > 256:
+            raise OAuthError("Invalid browser OAuth state.")
+        return AUTHORIZE_URL + "?" + urlencode({
+            "client_id": self.cfg.app_id,
+            "redirect_uri": self.cfg.public_base_url.rstrip("/") + "/web/instagram/callback",
+            "response_type": "code",
+            "scope": ",".join(self.cfg.scopes),
+            "state": state,
+        })
+
     def authorize_url(self, telegram_id, now=None) -> str:
         state = crypto.sign(self.cfg.signing_secret,
                             {"tg": str(telegram_id), "p": "ig_oauth"},
@@ -44,7 +56,7 @@ class InstagramOAuth:
             raise OAuthError("Invalid or expired link. Run /connect again.")
         return body["tg"]
 
-    def exchange_code(self, code: str) -> dict:
+    def exchange_code(self, code: str, redirect_uri=None) -> dict:
         """code -> long-lived token. Returns {access_token, expires_in}."""
         code = (code or "").split("#")[0]
         if not code:
@@ -54,7 +66,7 @@ class InstagramOAuth:
                 "client_id": self.cfg.app_id,
                 "client_secret": self.cfg.app_secret,
                 "grant_type": "authorization_code",
-                "redirect_uri": self.cfg.redirect_uri,
+                "redirect_uri": redirect_uri or self.cfg.redirect_uri,
                 "code": code,
             })
             if "data" in short:          # older response shape

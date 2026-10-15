@@ -40,8 +40,17 @@ class AccountStore:
         self.clock = clock
 
     def ensure_indexes(self):
-        # Keep the legacy constraint while adding the namespaced owner constraint.
-        self.col.create_index("telegram_id", unique=True)
+        # The old non-sparse unique Telegram index treats missing telegram_id
+        # values as null, which would permit only one web-owned account. Replace
+        # that index once with a sparse unique index while preserving Telegram
+        # uniqueness for records that actually have a Telegram ID.
+        if hasattr(self.col, "list_indexes"):
+            for index in list(self.col.list_indexes()):
+                key = dict(index.get("key", {}))
+                if (key == {"telegram_id": 1} and index.get("unique") and
+                        not index.get("sparse")):
+                    self.col.drop_index(index["name"])
+        self.col.create_index("telegram_id", unique=True, sparse=True)
         self.col.create_index("owner_id", unique=True, sparse=True)
 
     @staticmethod

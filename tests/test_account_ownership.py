@@ -13,6 +13,18 @@ class FakeCollection:
     def create_index(self, *args, **kwargs):
         self.indexes.append((args, kwargs))
 
+    def list_indexes(self):
+        for args, options in self.indexes:
+            field = args[0]
+            key = {field: 1} if isinstance(field, str) else dict(field)
+            yield {"name": "_".join(key) + "_1", "key": key, **options}
+
+    def drop_index(self, name):
+        self.indexes = [
+            (args, options) for args, options in self.indexes
+            if "_".join(args[0] if isinstance(args[0], tuple) else (args[0],)) + "_1" != name
+        ]
+
     def _matches(self, doc, query):
         if "$or" in query:
             return any(self._matches(doc, part) for part in query["$or"])
@@ -68,8 +80,14 @@ class AccountOwnershipTests(unittest.TestCase):
 
     def test_indexes_keep_legacy_and_add_owner_id(self):
         self.store.ensure_indexes()
-        self.assertIn((("telegram_id",), {"unique": True}), self.collection.indexes)
+        self.assertIn((("telegram_id",), {"unique": True, "sparse": True}), self.collection.indexes)
         self.assertIn((("owner_id",), {"unique": True, "sparse": True}), self.collection.indexes)
+
+    def test_old_non_sparse_telegram_index_is_migrated(self):
+        self.collection.indexes.append((("telegram_id",), {"unique": True}))
+        self.store.ensure_indexes()
+        self.assertNotIn((("telegram_id",), {"unique": True}), self.collection.indexes)
+        self.assertIn((("telegram_id",), {"unique": True, "sparse": True}), self.collection.indexes)
 
     def test_web_accounts_are_namespaced_and_not_visible_to_telegram(self):
         web = Principal.from_web("issuer|subject-123")
