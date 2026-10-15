@@ -97,7 +97,7 @@ class WebSessionTests(unittest.TestCase):
 
     def test_cookie_rejects_header_injection(self):
         with self.assertRaises(ValueError):
-            session_cookie("abc\\r\\nSet-Cookie: attacker=1")
+            session_cookie("abc\r\nSet-Cookie: attacker=1")
 
 
 if __name__ == "__main__":
