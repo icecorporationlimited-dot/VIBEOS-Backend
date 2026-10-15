@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone
 
 import media_quality as mq
+from publishing.identity import Principal, owner_filter
 
 logger = logging.getLogger(__name__)
 
@@ -413,9 +414,36 @@ class ContentBuffer:
                 and (a.get("route") or {}).get("format") != "reel_source"]
 
     def get_media(self, asset_id, variant=None) -> bytes:
+        """Legacy internal lookup by asset ID.
+
+        Keep this for existing trusted Telegram pipeline callers. Browser-facing
+        routes must use get_media_for() so an asset ID alone never grants access.
+        """
         asset = self.assets.find_one({"_id": asset_id})
         if not asset:
             raise KeyError(f"Unknown asset {asset_id}")
+        if variant:
+            return self.blobs.get(asset["creative"]["variants"][variant])
+        return self.blobs.get(asset["blob_id"])
+
+    def get_media_for(self, principal, asset_id, variant=None) -> bytes:
+        """Read media only when the verified principal owns the asset.
+
+        Web principals match owner_id only. Telegram principals may read legacy
+        rows that have no owner_id and still use telegram_id during migration.
+        Use this method for any browser/session-authenticated media endpoint.
+        """
+        if not isinstance(principal, Principal):
+            raise TypeError("A verified Principal is required.")
+        asset = self.assets.find_one({
+            "$and": [
+                {"_id": asset_id},
+                owner_filter(principal),
+            ]
+        })
+        if not asset:
+            # Do not reveal whether another tenant's asset ID exists.
+            raise KeyError("Media not found")
         if variant:
             return self.blobs.get(asset["creative"]["variants"][variant])
         return self.blobs.get(asset["blob_id"])
