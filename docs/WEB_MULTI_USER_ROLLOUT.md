@@ -19,6 +19,14 @@ This document tracks the security boundary required before enabling public multi
 
 The authenticated browser media route now resolves the current web session and calls `get_media_for()`; inaccessible, missing, or unsupported media returns a generic not-found response. The legacy signed `/media/<token>` endpoint remains for Instagram's server-to-server fetches and is a separate bearer-URL boundary that still needs review. Do not enable public web publishing based on this step alone.
 
+## Publishing job ownership groundwork
+
+- [x] Stamp new Telegram publishing jobs with a namespaced owner ID.
+- [x] Scope queue, prefix lookup, retry, cancel, release, and job-owned asset reads through the verified Telegram principal's owner filter, with a legacy-job fallback.
+- [x] Add an owner index and focused selector tests.
+
+This remains Telegram-worker groundwork, not end-to-end web publishing support. Worker account/token resolution remains Telegram-specific, and worker state transitions and account lifecycle paths still need a full tenant-boundary audit before public multi-user publishing.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.
