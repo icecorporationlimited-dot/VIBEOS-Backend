@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 VALID_VIBES = {"baddie", "soft", "moody", "natural"}
+# Format-routing hint only; this must never decide whether a photo is accepted.
+MIN_CAROUSEL_QUALITY = 0.35
 
 
 def _clamp01(value: Any) -> float:
@@ -66,7 +68,7 @@ def decide_content(*, analysis: dict | None = None,
     # Multiple sufficiently different assets are a carousel candidate, not a
     # Reel automatically: stills alone need rendering to become a video.
     if len(assets) >= 2:
-        good = [a for a in assets if _clamp01((a.get("analysis") or {}).get("quality_score", 0)) >= 0.55]
+        good = [a for a in assets if _clamp01((a.get("analysis") or {}).get("quality_score", 0)) >= MIN_CAROUSEL_QUALITY]
         if len(good) >= 2:
             return {"format": "carousel", "content_source": "photo_batch",
                     "event_key": event.get("event_key") if is_event else None,
