@@ -73,6 +73,9 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
             if web_login is not None and url.path == "/oidc/callback":
                 status, body, headers = web_login.callback(parse_qs(url.query), self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
+            if web_login is not None and url.path == "/web/instagram/callback":
+                status, body, headers = web_login.instagram_callback(parse_qs(url.query), self.headers.get("Cookie", ""))
+                return self._send(status, body, extra=headers)
             if url.path == "/oauth/callback":
                 return self._oauth(parse_qs(url.query))
             if url.path.startswith("/media/") and url.path.endswith(".jpg"):
@@ -83,7 +86,7 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
 
         def do_POST(self):
             url = urlparse(self.path)
-            if web_login is None or url.path != "/logout":
+            if web_login is None or url.path not in ("/logout", "/web/instagram/connect"):
                 return self._send(404, "not found", "text/plain")
             if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/x-www-form-urlencoded":
                 return self._send(415, "unsupported media type", "text/plain")
@@ -94,8 +97,13 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None):
             if size < 0 or size > 8192:
                 return self._send(413, "request too large", "text/plain")
             raw = self.rfile.read(size).decode("utf-8", "replace")
-            status, body, headers = web_login.logout(
-                self.headers.get("Cookie", ""), parse_qs(raw), self.headers.get("Origin", ""))
+            form = parse_qs(raw)
+            if url.path == "/web/instagram/connect":
+                status, body, headers = web_login.instagram_start(
+                    self.headers.get("Cookie", ""), form, self.headers.get("Origin", ""))
+            else:
+                status, body, headers = web_login.logout(
+                    self.headers.get("Cookie", ""), form, self.headers.get("Origin", ""))
             return self._send(status, body, extra=headers)
 
         def _oauth(self, q):
