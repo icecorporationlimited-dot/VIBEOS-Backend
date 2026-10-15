@@ -156,6 +156,25 @@ class MultiUserSecurityE2ETests(unittest.TestCase):
         self.assertEqual(len(jobs.update_calls), before)
         self.assertEqual(jobs.find_one({"_id": "web-job"})["status"], QUEUED)
 
+    def test_worker_rejects_mismatched_telegram_and_owner_ids(self):
+        jobs = FakeCollection([
+            {"_id": "mismatched-job", "owner_id": "tg:456", "telegram_id": "123",
+             "status": QUEUED, "created_at": self.now, "next_attempt_at": self.now},
+            {"_id": "invalid-id-job", "owner_id": "tg:not-numeric", "telegram_id": "not-numeric",
+             "status": QUEUED, "created_at": self.now, "next_attempt_at": self.now},
+            {"_id": "legacy-job", "telegram_id": "789", "status": QUEUED,
+             "created_at": self.now, "next_attempt_at": self.now},
+        ])
+        service = PublishService(jobs, object(), object(), object(), object(), object(),
+                                 clock=lambda: self.now)
+        self.assertEqual([job["_id"] for job in service.due_jobs()], ["legacy-job"])
+        for job_id in ("mismatched-job", "invalid-id-job"):
+            before = len(jobs.update_calls)
+            result = service.run(job_id)
+            self.assertEqual(result["_id"], job_id)
+            self.assertEqual(len(jobs.update_calls), before)
+            self.assertEqual(jobs.find_one({"_id": job_id})["status"], QUEUED)
+
 
 if __name__ == "__main__":
     unittest.main()
