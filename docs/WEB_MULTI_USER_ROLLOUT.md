@@ -35,6 +35,13 @@ This remains Telegram-worker groundwork, not end-to-end web publishing support. 
 
 This is ownership groundwork, not browser autopilot support. Web dashboard actions, web timezone/account adapters, worker state transitions, and end-to-end scheduled publishing still require integration and tests before public multi-user publishing.
 
+## Retry, cancellation, and account lifecycle security
+
+- [x] Make retry, cancel, release, queue, and prefix lookup accept a verified Principal and scope all job selectors through its owner filter; plain Telegram IDs remain a compatibility entry point.
+- [x] Preserve account-store owner-scoped disconnect, token lookup, refresh, and reauthorization operations; add regression coverage for job mutation ownership and account lifecycle boundaries.
+
+The worker execution loop still uses Telegram account resolution and internal job-ID transitions. This PR does not make web jobs executable and does not replace the separate signed media-URL review. Do not enable public multi-user publishing until worker claim/state transitions and account lifecycle integration are fully audited.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.
