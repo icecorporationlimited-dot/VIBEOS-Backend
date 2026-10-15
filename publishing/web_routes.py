@@ -50,8 +50,9 @@ def _page(title, body):
 class WebLoginRoutes:
     """Small route service; only this adapter may issue browser sessions."""
 
-    def __init__(self, cfg, oidc, sessions):
+    def __init__(self, cfg, oidc, sessions, instagram_connect=None, accounts=None):
         self.cfg, self.oidc, self.sessions = cfg, oidc, sessions
+        self.instagram_connect, self.accounts = instagram_connect, accounts
         self.origin = cfg.public_base_url.rstrip("/")
         self.callback_path = "/oidc/callback"
         self.login_path = "/login"
@@ -99,13 +100,35 @@ class WebLoginRoutes:
         csrf = _cookie_value(cookie_header, CSRF_COOKIE)
         if not csrf:
             return 403, _page("Session needs refreshing", "<p>Please sign in again.</p>"), {}
-        body = (
-            "<p>You are signed in.</p>"
+        body = "<p>You are signed in.</p>"
+        if self.instagram_connect is not None and self.accounts is not None:
+            account = self.accounts.get_for(principal)
+            if account and account.get("status") == "active":
+                body += "<p>Instagram connected: <strong>@" + html.escape(str(account.get("username") or "account")) + "</strong></p>"
+            else:
+                body += (
+                    "<p>Connect your Instagram professional account to VIBEOS.</p>"
+                    "<form method=post action='/web/instagram/connect'>"
+                    "<input type=hidden name=csrf_token value='" + html.escape(csrf, quote=True) + "'>"
+                    "<button type=submit>Connect Instagram</button></form>"
+                )
+        body += (
             "<form method=post action='/logout'>"
             "<input type=hidden name=csrf_token value='" + html.escape(csrf, quote=True) + "'>"
             "<button type=submit>Sign out</button></form>"
         )
         return 200, _page("VIBEOS", body), {}
+
+
+    def instagram_start(self, cookie_header, form, origin):
+        if self.instagram_connect is None:
+            return 404, _page("Instagram connect unavailable", "<p>Please try again later.</p>"), {}
+        return self.instagram_connect.start(cookie_header, form, origin)
+
+    def instagram_callback(self, query, cookie_header):
+        if self.instagram_connect is None:
+            return 404, _page("Instagram connect unavailable", "<p>Please try again later.</p>"), {}
+        return self.instagram_connect.callback(query, cookie_header)
 
     def logout(self, cookie_header, form, origin):
         token = _cookie_value(cookie_header, SESSION_COOKIE)
