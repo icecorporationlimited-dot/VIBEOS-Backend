@@ -16,6 +16,8 @@ validates, so a typo in Telegram can never leave the engine in a broken state.
 import re
 from datetime import datetime, timezone
 
+from .identity import Principal, owner_filter
+
 FORMATS = ("photo", "story", "carousel", "reel")
 DEFAULTS = {
     "enabled": False,
@@ -89,11 +91,22 @@ class AutopilotStore:
     def __init__(self, collection, clock=_now):
         self.col, self.clock = collection, clock
 
+    @staticmethod
+    def _principal(identity):
+        # Plain IDs remain the Telegram compatibility entry point. Web adapters
+        # must pass a Principal created only after session validation.
+        return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
+
     def ensure_indexes(self):
         self.col.create_index("telegram_id", unique=True)
+        self.col.create_index("owner_id", unique=True, sparse=True)
+
+    def _find_doc(self, principal):
+        return self.col.find_one(owner_filter(principal))
 
     def get(self, telegram_id) -> dict:
-        doc = self.col.find_one({"telegram_id": str(telegram_id)}) or {}
+        principal = self._principal(telegram_id)
+        doc = self._find_doc(principal) or {}
         out = {k: (list(v) if isinstance(v, list) else v) for k, v in DEFAULTS.items()}
         for k in DEFAULTS:
             if k in doc:
@@ -101,19 +114,32 @@ class AutopilotStore:
         return out
 
     def update(self, telegram_id, **fields) -> dict:
+        principal = self._principal(telegram_id)
         clean = {k: _clean(k, v) for k, v in fields.items()}
-        self.col.update_one(
-            {"telegram_id": str(telegram_id)},
-            {"$set": {**clean, "updated_at": self.clock()},
-             "$setOnInsert": {"telegram_id": str(telegram_id)}},
-            upsert=True)
-        return self.get(telegram_id)
+        existing = self._find_doc(principal)
+        values = {**clean, "owner_id": principal.owner_id, "updated_at": self.clock()}
+        if existing:
+            # Updating a legacy Telegram document also stamps its owner_id.
+            self.col.update_one({"_id": existing["_id"]}, {"$set": values})
+        else:
+            insert_values = {"owner_id": principal.owner_id}
+            if principal.kind == "telegram":
+                insert_values["telegram_id"] = principal.subject
+            self.col.update_one(
+                {"owner_id": principal.owner_id},
+                {"$set": {**clean, "updated_at": self.clock()},
+                 "$setOnInsert": insert_values},
+                upsert=True)
+        return self.get(principal)
 
     def set_paused(self, telegram_id, paused: bool) -> dict:
         return self.update(telegram_id, paused=paused)
 
     def enabled_users(self):
-        return [d["telegram_id"] for d in self.col.find({"enabled": True})]
+        # The current worker's delivery/account adapters are Telegram-specific;
+        # do not feed web principals into that worker until it is migrated.
+        return [d["telegram_id"] for d in self.col.find({"enabled": True})
+                if d.get("telegram_id")]
 
 
 HELP = (
