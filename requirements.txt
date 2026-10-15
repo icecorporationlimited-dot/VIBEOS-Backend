@@ -7,3 +7,4 @@ dnspython
 tzdata
 requests
 cryptography
+PyJWT[crypto]>=2.8,<3
