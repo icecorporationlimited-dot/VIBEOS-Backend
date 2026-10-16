@@ -486,6 +486,47 @@ class ContentBuffer:
             return self.blobs.get(asset["creative"]["variants"][variant])
         return self.blobs.get(asset["blob_id"])
 
+    def delete_asset(self, user_id, asset_id) -> bool:
+        """Permanently delete one asset owned by this Telegram user and its blobs.
+
+        The owner filter is included in both lookup and deletion so guessing
+        another user's asset ID cannot remove their content.
+        """
+        owner = str(user_id)
+        asset = self.assets.find_one({"_id": str(asset_id), "telegram_id": owner})
+        if not asset:
+            return False
+
+        blob_ids = set()
+        if asset.get("blob_id"):
+            blob_ids.add(str(asset["blob_id"]))
+        variants = (asset.get("creative") or {}).get("variants") or {}
+        if isinstance(variants, dict):
+            blob_ids.update(str(value) for value in variants.values() if value)
+
+        # Delete the tenant-owned row first; only then clean up its stored files.
+        result = self.assets.delete_one({"_id": asset["_id"], "telegram_id": owner})
+        if result.deleted_count != 1:
+            return False
+        for blob_id in blob_ids:
+            try:
+                self.blobs.delete(blob_id)
+            except Exception:
+                # Keep deletion moving if a stale/missing blob is encountered.
+                logger.warning("Could not remove blob for deleted asset %s", asset_id,
+                               exc_info=True)
+        return True
+
+    def delete_all_assets(self, user_id) -> int:
+        """Permanently delete every content-buffer asset belonging to this user."""
+        owner = str(user_id)
+        ids = [a["_id"] for a in self.list_assets(owner)]
+        deleted = 0
+        for asset_id in ids:
+            if self.delete_asset(owner, asset_id):
+                deleted += 1
+        return deleted
+
     def stats(self, user_id) -> dict:
         counts = {s: 0 for s in STATUSES}
         for asset in self.list_assets(user_id):
