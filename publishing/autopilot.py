@@ -138,9 +138,16 @@ class AutopilotStore:
         return self.update(telegram_id, paused=paused)
 
     def enabled_users(self):
+        # Posting autopilot and comment engagement are independent opt-ins.
+        # A user who enabled AI replies should not have to enable auto-scheduling.
         # The current worker's delivery/account adapters are Telegram-specific;
         # do not feed web principals into that worker until it is migrated.
-        return [d["telegram_id"] for d in self.col.find({"enabled": True})
+        query = {"$or": [
+            {"enabled": True},
+            {"auto_replies": True},
+            {"auto_comments": True},
+        ]}
+        return [d["telegram_id"] for d in self.col.find(query)
                 if d.get("telegram_id")]
 
 
