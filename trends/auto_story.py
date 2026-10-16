@@ -8,6 +8,7 @@ the worker cancels it, because a stale trend is worse than none.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import tempfile
 from dataclasses import dataclass, field
@@ -39,6 +40,7 @@ class TrendStoryConfig:
     smart: bool = True                            # themed + multi-step verified Stories (needs no AI to run)
     allow_solemn: bool = True                     # condolence Stories (confirmed, >=3 publishers)
     show_sources: bool = True                     # "Source: NDTV, HT" footer on the card
+    pool_size: int = 10                           # top-N trends considered, so users can get different ones
 
 
 def _aware(dt):
@@ -50,12 +52,34 @@ def posted_last_24h(buffer, tg, now) -> int:
     return len([a for a in rows if _aware(a["created_at"]) > now - timedelta(hours=24)])
 
 
+def _user_hash(tg, text) -> int:
+    return int(hashlib.sha1(f"{tg}|{text}".encode("utf-8")).hexdigest()[:12], 16)
+
+
+def _used_by_others_24h(buffer, tg, key, now) -> int:
+    """How many OTHER users already got this trend in the last 24h (so friends don't all get the same one)."""
+    rows = buffer.assets.find({"source": "trend_story", "trend_key": key})
+    return len([a for a in rows if str(a.get("telegram_id")) != str(tg)
+                and _aware(a["created_at"]) > now - timedelta(hours=24)])
+
+
+def order_for_user(tg, items, buffer, cfg, now):
+    """Top-N trends, least-used-by-others first, ties broken by a per-user shuffle; remaining trends follow."""
+    ranked = sorted(items, key=lambda i: i.get("approx_traffic_numeric") or 0, reverse=True)
+    pool = ranked[:max(1, cfg.pool_size)]
+    def rank(item):
+        key = make_key("topic", item.get("title", ""))
+        return (_used_by_others_24h(buffer, tg, key, now), _user_hash(tg, key))
+    return sorted(pool, key=rank) + ranked[len(pool):]   # rest stay as fallback: never post fewer stories
+
+
 def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, service, now=None):
     """Queue one trend Story. Returns a dict describing it, or None if nothing qualified."""
     now = now or datetime.now(timezone.utc)
     if posted_last_24h(buffer, tg, now) >= cfg.max_per_day:
         return None
-    ranked = sorted(items, key=lambda i: i.get("approx_traffic_numeric") or 0, reverse=True)
+    ranked = order_for_user(tg, items, buffer, cfg, now)
+    variant = str(tg)                                 # per-user seed: different wording + design
     for item in ranked:
         key = make_key("topic", item.get("title", ""))
         if buffer.assets.find_one({"telegram_id": str(tg), "trend_key": key}):
@@ -64,7 +88,8 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
             built = build_story(item, ai=cfg.ai, brand=cfg.brand,
                                 blocked_topics=settings.get("blocked_topics") or [],
                                 min_sources=cfg.min_sources, min_traffic=cfg.min_traffic,
-                                allow_solemn=cfg.allow_solemn, show_sources=cfg.show_sources, now=now)
+                                allow_solemn=cfg.allow_solemn, show_sources=cfg.show_sources, now=now,
+                                variant=variant)
             if not built["ok"]:
                 logger.info("Trend skipped (%s): %s", built["reason"], str(item.get("title"))[:60])
                 continue
