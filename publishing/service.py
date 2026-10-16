@@ -297,6 +297,28 @@ class PublishService:
                       "attempts": 0, "updated_at": self.clock()}})
         return res.matched_count == 1
 
+    def publish_now(self, telegram_id, asset_id, fmt) -> dict:
+        """Manual "post this one photo right now".
+
+        If the photo already has a pending job in this format (e.g. it was
+        scheduled for a later date), that same job is promoted to an immediate
+        manual job instead of being left waiting for its slot. Only this one
+        photo is touched; other scheduled jobs are never affected.
+        """
+        job = self.enqueue(telegram_id, [asset_id], fmt, None, "manual", True)
+        if job.get("duplicate") and job["status"] in (QUEUED, RETRY, HELD):
+            principal = self._principal(telegram_id)
+            now = self.clock()
+            self.jobs.update_one(
+                _owned_query(principal, {
+                    "_id": job["_id"], "status": {"$in": [QUEUED, RETRY, HELD]}}),
+                {"$set": {"source": "manual", "scheduled_at": None,
+                          "next_attempt_at": now, "policy_override": True,
+                          "hold_reason": None, "notified": None, "updated_at": now}})
+            job = self.jobs.find_one({"_id": job["_id"]})
+            job["duplicate"] = False
+        return job
+
     def cancel(self, job_id, telegram_id):
         """Atomically cancel an eligible job owned by this principal."""
         principal = self._principal(telegram_id)
