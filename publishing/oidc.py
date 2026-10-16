@@ -143,7 +143,7 @@ class OIDCLogin:
                 signing_key,
                 algorithms=list(ALLOWED_ID_TOKEN_ALGORITHMS),
                 audience=self.client_id,
-                issuer=self.issuer,
+                issuer=metadata["issuer"],
                 options={"require": ["sub", "exp", "iat", "iss", "aud", "nonce"]},
                 leeway=30,
             )
