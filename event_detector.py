@@ -25,6 +25,8 @@ def _json_from_text(text: str) -> dict[str, Any]:
     data["content_type"] = str(data.get("content_type", "general"))[:80]
     data["visual_summary"] = str(data.get("visual_summary", ""))[:500]
     data["suggested_caption_angle"] = str(data.get("suggested_caption_angle", ""))[:300]
+    # Keep the date text exactly as read; the planner resolves missing years.
+    data["visible_date_text"] = str(data.get("visible_date_text", "")).strip()[:80]
     return data
 
 
@@ -47,7 +49,8 @@ Return ONLY valid JSON with these keys:
   "content_type": "general",
   "confidence": 0.0,
   "visual_summary": "short visible description",
-  "suggested_caption_angle": "short creative direction"
+  "suggested_caption_angle": "short creative direction",
+  "visible_date_text": ""
 }
 Rules:
 - event_related is true only when visible evidence strongly suggests a specific occasion (e.g. Diwali lamps/decor, birthday cake, graduation gown, wedding ceremony, Christmas tree).
@@ -55,6 +58,7 @@ Rules:
 - Do not infer a person's identity, religion, ethnicity, age, or other sensitive traits. Do not infer an event from the person's appearance alone.
 - confidence must be 0 to 1. Use conservative confidence; if uncertain, use false.
 - content_type must be exactly one of: general, occasion, behind_the_scenes, casual_update, daily_life. Use behind_the_scenes/casual_update/daily_life only for clearly candid, unposed snapshots; use general when unsure.
+- If a date is visibly printed on the poster/invitation (e.g. "5 Nov", "November 5", "05/11/2026"), copy it into visible_date_text exactly. If no date is visibly printed, use an empty string. Do not infer dates from the occasion or current calendar.
 - Do not claim that an audio/song is trending or licensed.
 """
     encoded = base64.b64encode(image_bytes).decode("ascii")
