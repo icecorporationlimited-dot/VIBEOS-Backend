@@ -12,7 +12,9 @@ class PublishingConfig:
     encryption_key: str         # Fernet key for tokens at rest
     graph_version: str = "v26.0"
     scopes: tuple = ("instagram_business_basic",
-                     "instagram_business_content_publish")
+                     "instagram_business_content_publish",
+                     "instagram_business_manage_comments",
+                     "instagram_business_manage_messages")
     http_port: int = 8080
     media_url_ttl: int = 3600   # seconds a signed media URL stays valid
     poll_interval: float = 5.0
