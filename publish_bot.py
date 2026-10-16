@@ -117,14 +117,16 @@ def build_runtime(db, content_buffer, bot_token):
     classifier = make_groq_classifier(
         getattr(app_settings, "GROQ_API_KEY", ""),
         getattr(app_settings, "TREND_MODEL", getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b")))
-    trend_cfg = TrendStoryConfig(
-        fetch=partial(fetch_google_trends, region, None, 20), classifier=classifier,
-        brand=getattr(app_settings, "TREND_BRAND", "VIBEOS"),
-        show_headline=getattr(app_settings, "TREND_SHOW_HEADLINE", True))
     from engagement.openrouter_ai import OpenRouterAI
     engagement_ai = OpenRouterAI(
         getattr(app_settings, "OPENROUTER_API_KEY", ""),
         getattr(app_settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    trend_cfg = TrendStoryConfig(
+        ai=engagement_ai, smart=getattr(app_settings, "TREND_SMART", True),
+        allow_solemn=getattr(app_settings, "TREND_ALLOW_SOLEMN", True),
+        fetch=partial(fetch_google_trends, region, None, 20), classifier=classifier,
+        brand=getattr(app_settings, "TREND_BRAND", "VIBEOS"),
+        show_headline=getattr(app_settings, "TREND_SHOW_HEADLINE", True))
     engagement_events = db["engagement_events"]
     worker = Worker(service, accounts, autopilot, calendar, content_buffer,
                     notify=lambda tg, text: send_telegram(bot_token, tg, text),

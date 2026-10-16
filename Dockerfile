@@ -3,9 +3,9 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# FFmpeg is needed for Reel rendering
+# FFmpeg: Reels. fonts-noto-color-emoji + libraqm0: emoji and Devanagari on Story cards
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-noto-color-emoji libraqm0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

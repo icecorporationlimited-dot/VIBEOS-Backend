@@ -19,6 +19,7 @@ from autonomous.decision_engine import decide_content
 from creative_studio.story_templates import render_trend_story
 from trends import safety
 from trends.schema import make_key
+from trends.smart_story import build_story
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ class TrendStoryConfig:
     max_per_day: int = 1                          # per user, rolling 24h
     allowed_categories: tuple = safety.SAFE_CATEGORIES
     show_headline: bool = True                    # publisher headline + name on the card
+    ai: object | None = None                      # OpenRouterAI-like; enables the smart themed pipeline
+    smart: bool = True                            # themed + multi-step verified Stories (needs no AI to run)
+    allow_solemn: bool = True                     # condolence Stories (confirmed, >=3 publishers)
+    show_sources: bool = True                     # "Source: NDTV, HT" footer on the card
 
 
 def _aware(dt):
@@ -55,25 +60,37 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
         key = make_key("topic", item.get("title", ""))
         if buffer.assets.find_one({"telegram_id": str(tg), "trend_key": key}):
             continue                                  # this trend was already used
-        verdict = safety.assess(
-            item, blocked_topics=settings.get("blocked_topics") or [], classifier=cfg.classifier,
-            min_sources=cfg.min_sources, min_traffic=cfg.min_traffic,
-            allowed_categories=cfg.allowed_categories, now=now)
-        if not verdict["ok"]:
-            logger.info("Trend skipped (%s): %s", verdict["reason"], str(item.get("title"))[:60])
-            continue
+        if cfg.smart:
+            built = build_story(item, ai=cfg.ai, brand=cfg.brand,
+                                blocked_topics=settings.get("blocked_topics") or [],
+                                min_sources=cfg.min_sources, min_traffic=cfg.min_traffic,
+                                allow_solemn=cfg.allow_solemn, show_sources=cfg.show_sources, now=now)
+            if not built["ok"]:
+                logger.info("Trend skipped (%s): %s", built["reason"], str(item.get("title"))[:60])
+                continue
+            verdict = {"ok": True, "category": built["plan"]["kind"]}
+            data = built["jpg"]
+        else:
+            verdict = safety.assess(
+                item, blocked_topics=settings.get("blocked_topics") or [], classifier=cfg.classifier,
+                min_sources=cfg.min_sources, min_traffic=cfg.min_traffic,
+                allowed_categories=cfg.allowed_categories, now=now)
+            if not verdict["ok"]:
+                logger.info("Trend skipped (%s): %s", verdict["reason"], str(item.get("title"))[:60])
+                continue
         decision = decide_content(trend=item, allow_trend_posts=True)
         if decision["format"] != "story" or not decision["auto_publish_allowed"]:
             continue
 
-        with tempfile.TemporaryDirectory(prefix="vibeos_trend_") as tmp:
-            path = Path(tmp) / "story.jpg"
-            try:
-                render_trend_story(item, path, brand=cfg.brand, show_headline=cfg.show_headline)
-            except (OSError, ValueError):
-                logger.exception("Trend card render failed")
-                continue
-            data = path.read_bytes()
+        if not cfg.smart:
+            with tempfile.TemporaryDirectory(prefix="vibeos_trend_") as tmp:
+                path = Path(tmp) / "story.jpg"
+                try:
+                    render_trend_story(item, path, brand=cfg.brand, show_headline=cfg.show_headline)
+                except (OSError, ValueError):
+                    logger.exception("Trend card render failed")
+                    continue
+                data = path.read_bytes()
 
         publishers = []
         for n in item.get("news") or []:
@@ -81,6 +98,9 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
                 publishers.append(n["source"])
         meta = {"title": item["title"], "key": key, "category": verdict["category"],
                 "publishers": publishers[:5], "decision": decision}
+        if cfg.smart:
+            meta["verification"] = [x["step"] for x in built["steps"] if x["ok"]]
+            meta["ai_source"] = built["plan"]["source"]
         res = buffer.add_trend_story(tg, data, trend_key=key, title=item["title"], meta=meta)
         if res["duplicate"]:
             continue

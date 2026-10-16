@@ -1,0 +1,396 @@
+"""Mood-based 9:16 Story renderer (replaces the single dark template).
+
+One design per mood so a tragedy never looks like a celebration:
+
+  solemn      pure black, B&W portrait, serif text, one quiet emoji (condolence)
+  celebration confetti on a vivid gradient, framed photo, party emoji
+  festival    warm saffron/maroon, bokeh lights, arch-shaped photo
+  sports      navy + neon stripes, big photo with the headline over it
+  game        neon grid / pixel frame, glitch-style title
+  music       magenta gradient, equaliser bars, vinyl-style round photo
+  movie       cinematic teal/orange, gold frame
+  tech        blue circuit dots, cyan accent
+  general     clean gradient fallback
+
+Text may contain colour emoji (Noto Color Emoji) and Hinglish. Devanagari needs
+libraqm for correct shaping; without it we refuse to draw it rather than
+render broken glyphs (the AI planner is told to write Roman script anyway).
+
+Everything that must be read stays inside Instagram's safe zone (y 270..1530).
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+import random
+import re
+from functools import lru_cache
+from pathlib import Path
+
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, features
+
+W, H = 1080, 1920
+FONT_DIR = Path(__file__).resolve().parents[1] / "fonts"
+EMOJI_FONTS = [
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf",
+]
+DEVA_RE = re.compile(r"[\u0900-\u097F]")
+EMOJI_RE = re.compile(
+    "([\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2300-\u23FF]"
+    "[\uFE0F\u200D\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF]*)")
+
+THEMES = {
+    "solemn": dict(grad=((0, 0, 0), (0, 0, 0)), text=(245, 245, 245), sub=(170, 170, 170),
+                   accent=(255, 255, 255), style="serif", shape="circle", painter=None),
+    "celebration": dict(grad=((255, 61, 129), (255, 168, 76)), text=(255, 255, 255), sub=(255, 240, 230),
+                        accent=(255, 255, 255), style="bold", shape="round", painter="confetti",
+                        chip="CONGRATULATIONS \U0001F389", chip_fill=(255, 255, 255), chip_text=(200, 30, 90),
+                        hero="\U0001F389"),
+    "festival": dict(grad=((70, 8, 30), (255, 132, 20)), text=(255, 226, 140), sub=(255, 240, 210),
+                     accent=(255, 200, 80), style="bold", shape="arch", painter="bokeh",
+                     chip="HAPPY VIBES \U0001FA94", chip_fill=(255, 200, 80), chip_text=(80, 20, 20),
+                     hero="\U0001FA94"),
+    "sports": dict(grad=((6, 10, 30), (14, 40, 90)), text=(255, 255, 255), sub=(200, 225, 255),
+                   accent=(0, 232, 150), style="bold", shape="round", painter="stripes",
+                   chip="LIVE BUZZ \u26A1", chip_fill=(0, 232, 150), chip_text=(5, 20, 20),
+                   hero="\U0001F3CF", upper=True),
+    "game": dict(grad=((16, 6, 44), (60, 10, 90)), text=(120, 255, 255), sub=(235, 200, 255),
+                 accent=(255, 60, 200), style="bold", shape="pixel", painter="grid",
+                 chip="PRESS START \U0001F3AE", chip_fill=(255, 60, 200), chip_text=(255, 255, 255),
+                 hero="\U0001F3AE", upper=True),
+    "music": dict(grad=((40, 0, 80), (255, 0, 110)), text=(255, 255, 255), sub=(255, 225, 240),
+                  accent=(255, 255, 255), style="bold", shape="circle", painter="bars",
+                  chip="NOW TRENDING \U0001F3B5", chip_fill=(255, 255, 255), chip_text=(120, 0, 90),
+                  hero="\U0001F3A4"),
+    "movie": dict(grad=((8, 28, 36), (140, 70, 20)), text=(255, 225, 150), sub=(240, 230, 210),
+                  accent=(240, 190, 90), style="bold", shape="round", painter="dots",
+                  chip="NOW SHOWING \U0001F3AC", chip_fill=(240, 190, 90), chip_text=(30, 20, 10),
+                  hero="\U0001F3AC"),
+    "tech": dict(grad=((4, 14, 40), (0, 70, 130)), text=(255, 255, 255), sub=(190, 225, 255),
+                 accent=(0, 210, 255), style="bold", shape="round", painter="dots",
+                 chip="TECH BUZZ \U0001F916", chip_fill=(0, 210, 255), chip_text=(0, 25, 50),
+                 hero="\U0001F4F1"),
+    "general": dict(grad=((60, 40, 160), (20, 130, 200)), text=(255, 255, 255), sub=(225, 235, 255),
+                    accent=(255, 255, 255), style="bold", shape="round", painter="dots",
+                    chip="TRENDING \U0001F525", chip_fill=(255, 255, 255), chip_text=(40, 30, 120),
+                    hero="\U0001F525"),
+}
+THEMES["congrats"] = THEMES["celebration"]
+KINDS = tuple(THEMES)
+
+
+# ---------------------------------------------------------------- fonts / emoji
+def _first_existing(paths):
+    return next((p for p in paths if Path(p).exists()), None)
+
+
+def has_emoji_font() -> bool:
+    return _first_existing(EMOJI_FONTS) is not None
+
+
+def raqm_ok() -> bool:
+    return bool(features.check("raqm"))
+
+
+@lru_cache(maxsize=64)
+def _font(style: str, size: int):
+    name = {"bold": "Poppins-Bold.ttf", "medium": "Poppins-Medium.ttf",
+            "light": "Poppins-Light.ttf", "serif": "Lora-Italic-Variable.ttf"}[style]
+    return ImageFont.truetype(str(FONT_DIR / name), size)
+
+
+def pick_font(style: str, size: int, text: str = ""):
+    if DEVA_RE.search(text):
+        if not raqm_ok():
+            raise ValueError("Devanagari text needs libraqm (apt install libraqm0); use Roman Hinglish")
+        style = "bold" if style == "serif" else style
+    return _font(style, size)
+
+
+@lru_cache(maxsize=256)
+def _emoji_img(ch: str, px: int):
+    path = _first_existing(EMOJI_FONTS)
+    if not path:
+        return None
+    try:
+        font = ImageFont.truetype(path, 109)             # the only size CBDT bitmaps allow
+        canvas = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+        ImageDraw.Draw(canvas).text((10, 10), ch, font=font, embedded_color=True)
+        box = canvas.getbbox()
+        if not box:
+            return None
+        glyph = canvas.crop(box)
+        scale = px / max(glyph.size)
+        return glyph.resize((max(1, round(glyph.width * scale)), max(1, round(glyph.height * scale))),
+                            Image.Resampling.LANCZOS)
+    except (OSError, ValueError):
+        return None
+
+
+def _segments(text: str):
+    return [s for s in EMOJI_RE.split(text) if s]
+
+
+def _is_emoji(seg: str) -> bool:
+    return bool(EMOJI_RE.fullmatch(seg))
+
+
+def measure(draw, text, font, emoji_px) -> float:
+    total = 0.0
+    for seg in _segments(text):
+        if _is_emoji(seg):
+            glyph = _emoji_img(seg, emoji_px)
+            total += (glyph.width + 8) if glyph else 0
+        else:
+            total += draw.textlength(seg, font=font)
+    return total
+
+
+def draw_rich(img, draw, x, y, text, font, fill, emoji_px, shadow=None):
+    """Draw text with inline colour emoji. (x, y) is the top-left of the line."""
+    cx = x
+    for seg in _segments(text):
+        if _is_emoji(seg):
+            glyph = _emoji_img(seg, emoji_px)
+            if glyph:
+                img.paste(glyph, (round(cx), round(y + (font.size - glyph.height) / 2 + 4)), glyph)
+                cx += glyph.width + 8
+        else:
+            if shadow:
+                draw.text((cx + 3, y + 4), seg, font=font, fill=shadow)
+            draw.text((cx, y), seg, font=font, fill=fill)
+            cx += draw.textlength(seg, font=font)
+
+
+def wrap_fit(draw, text, style, start, floor, max_w, max_lines):
+    """Largest font size (start..floor) whose wrap fits max_lines. Returns (font, lines)."""
+    size = start
+    while True:
+        font = pick_font(style, size, text)
+        words, lines, cur = text.split(), [], ""
+        for word in words:
+            trial = (cur + " " + word).strip()
+            if measure(draw, trial, font, int(size * 0.95)) <= max_w or not cur:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        if len(lines) <= max_lines or size <= floor:
+            return font, lines[:max_lines]
+        size -= 4
+
+
+def draw_block(img, draw, lines, font, fill, y, line_h, *, center=True, shadow=None, x=100, spacing=0):
+    emoji_px = int(font.size * 0.95)
+    for line in lines:
+        width = measure(draw, line, font, emoji_px)
+        left = (W - width) / 2 if center else x
+        draw_rich(img, draw, left, y, line, font, fill, emoji_px, shadow)
+        y += line_h
+    return y
+
+
+# ---------------------------------------------------------------- backgrounds
+def _gradient(top, bottom):
+    img = Image.new("RGB", (W, H))
+    px = ImageDraw.Draw(img)
+    for y in range(H):
+        t = y / (H - 1)
+        px.line((0, y, W, y), fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
+    return img
+
+
+def _rng(seed_text):
+    return random.Random(int(hashlib.sha1(seed_text.encode("utf-8")).hexdigest()[:12], 16))
+
+
+def _paint(img, kind, theme, seed):
+    painter, rnd = theme.get("painter"), _rng(seed)
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    if painter == "confetti":
+        palette = [(255, 255, 255), (255, 232, 90), (90, 220, 255), (150, 255, 160), (255, 120, 220)]
+        for _ in range(110):
+            x, y, s = rnd.randrange(W), rnd.randrange(H), rnd.randrange(14, 34)
+            color = rnd.choice(palette) + (rnd.randrange(150, 235),)
+            if rnd.random() < 0.5:
+                d.ellipse((x, y, x + s // 2, y + s // 2), fill=color)
+            else:
+                piece = Image.new("RGBA", (s, s // 2), color).rotate(rnd.randrange(360), expand=True)
+                layer.paste(piece, (x, y), piece)
+    elif painter == "bokeh":
+        for _ in range(55):
+            x, y, r = rnd.randrange(W), rnd.randrange(H), rnd.randrange(20, 90)
+            d.ellipse((x - r, y - r, x + r, y + r), fill=(255, rnd.randrange(170, 230), 90, rnd.randrange(25, 70)))
+        layer = layer.filter(ImageFilter.GaussianBlur(6))
+    elif painter == "stripes":
+        for i in range(-2, 8):
+            x = i * 260
+            d.polygon([(x, 0), (x + 90, 0), (x + 90 + 700, H), (x + 700, H)], fill=theme["accent"] + (22,))
+    elif painter == "grid":
+        for x in range(0, W, 60):
+            d.line((x, 0, x, H), fill=(0, 255, 255, 28), width=2)
+        for y in range(0, H, 60):
+            d.line((0, y, W, y), fill=(255, 60, 200, 28), width=2)
+        for y in range(0, H, 6):
+            d.line((0, y, W, y), fill=(0, 0, 0, 40))        # scanlines
+    elif painter == "bars":
+        for i in range(24):
+            h = rnd.randrange(80, 330)
+            x = 60 + i * 41
+            d.rounded_rectangle((x, 1530 - h, x + 26, 1530), radius=10, fill=(255, 255, 255, 70))
+    elif painter == "dots":
+        for gx in range(40, W, 70):
+            for gy in range(40, H, 70):
+                if rnd.random() < 0.35:
+                    d.ellipse((gx - 3, gy - 3, gx + 3, gy + 3), fill=theme["accent"] + (70,))
+    img.paste(layer, (0, 0), layer)
+
+
+# ---------------------------------------------------------------- photo shapes
+def _cover(photo: Image.Image, w, h, top_bias=0.25):
+    ratio = max(w / photo.width, h / photo.height)
+    resized = photo.resize((max(w, round(photo.width * ratio)), max(h, round(photo.height * ratio))),
+                           Image.Resampling.LANCZOS)
+    left = (resized.width - w) // 2
+    top = round((resized.height - h) * top_bias)
+    return resized.crop((left, top, left + w, top + h))
+
+
+def _mask(shape, w, h):
+    m = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(m)
+    if shape == "circle":
+        d.ellipse((0, 0, w - 1, h - 1), fill=255)
+    elif shape == "arch":
+        d.pieslice((0, 0, w - 1, w - 1), 180, 360, fill=255)          # round top
+        d.rounded_rectangle((0, w // 2, w - 1, h - 1), radius=40, fill=255)
+        d.rectangle((0, w // 2, w - 1, w // 2 + 60), fill=255)
+    elif shape == "pixel":
+        d.rectangle((16, 16, w - 17, h - 17), fill=255)
+    else:
+        d.rounded_rectangle((0, 0, w - 1, h - 1), radius=48, fill=255)
+    return m
+
+
+def _place_photo(img, kind, theme, photo_bytes):
+    """Returns the y where text can start."""
+    shape = theme["shape"]
+    size = {"circle": (600, 600), "arch": (600, 700), "pixel": (760, 640)}.get(shape, (800, 640))
+    x, y = (W - size[0]) // 2, 400
+    try:
+        photo = ImageOps.exif_transpose(Image.open(io.BytesIO(photo_bytes))).convert("RGB")
+    except Exception as exc:
+        raise ValueError("photo is not a readable image") from exc
+    tile = _cover(photo, *size)
+    if kind == "solemn":
+        tile = ImageOps.grayscale(tile)
+        tile = ImageOps.autocontrast(tile, cutoff=1).convert("RGB")
+        vig = Image.radial_gradient("L").resize(size)       # dark edges, quiet look
+        tile = Image.composite(tile, Image.new("RGB", size, (0, 0, 0)), ImageOps.invert(vig).point(lambda v: 255 - int(v * 0.55)))
+    mask = _mask(shape, *size)
+    glow = Image.new("RGBA", (size[0] + 120, size[1] + 120), (0, 0, 0, 0))
+    gc = theme["accent"] + ((45 if kind == "solemn" else 110),)
+    glow.paste(Image.new("RGBA", size, gc), (60, 60), mask)
+    glow = glow.filter(ImageFilter.GaussianBlur(28))
+    img.paste(glow, (x - 60, y - 60), glow)
+    img.paste(tile, (x, y), mask)
+    if shape in ("round", "arch", "circle") and kind != "solemn":
+        ring = Image.new("RGBA", size, (0, 0, 0, 0))
+        edge = mask.filter(ImageFilter.MaxFilter(13))
+        ring.paste(Image.new("RGBA", size, theme["accent"] + (255,)), (0, 0), ImageChops.subtract(edge, mask))
+        img.paste(ring, (x, y), ring)
+    if shape == "pixel":
+        d = ImageDraw.Draw(img)
+        for i, col in enumerate(((255, 60, 200), (0, 255, 255))):
+            d.rectangle((x + i * 6, y + i * 6, x + size[0] - i * 6, y + size[1] - i * 6), outline=col, width=6)
+    return y + size[1] + 60
+
+
+def _place_hero_emoji(img, kind, theme, plan):
+    emojis = [e for e in (plan.get("emojis") or []) if _emoji_img(e, 40)] or [theme.get("hero", "\U0001F54A\uFE0F")]
+    big = _emoji_img(emojis[0], 360 if kind != "solemn" else 300)
+    cy = 640
+    if big:
+        img.paste(big, ((W - big.width) // 2, cy - big.height // 2), big)
+    for i, e in enumerate(emojis[1:3]):
+        small = _emoji_img(e, 130)
+        if small:
+            x = 150 if i == 0 else W - 150 - small.width
+            img.paste(small, (x, cy + 190 + i * 40), small)
+    return 1070
+
+
+# ---------------------------------------------------------------- main entry
+def _chip(img, draw, theme, text, y=300):
+    font = pick_font("bold", 34, text)
+    px = 30
+    width = measure(draw, text, font, 34) + 2 * 40
+    x = (W - width) / 2
+    draw.rounded_rectangle((x, y, x + width, y + 72), radius=36, fill=theme["chip_fill"])
+    draw_rich(img, draw, x + 40, y + 12, text, font, theme["chip_text"], 34)
+
+
+def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, brand: str = "VIBEOS",
+                 footer: str = "") -> Path:
+    """Render one Story from an AI/user plan:
+       {kind, headline, subline, chip, emojis[], photo_credit}. Raises ValueError on bad input."""
+    kind = str(plan.get("kind", "general")).lower()
+    theme = THEMES.get(kind)
+    headline = str(plan.get("headline", "")).strip()
+    if not theme or not headline:
+        raise ValueError("plan needs a known kind and a headline")
+    if not has_emoji_font():
+        plan = {**plan, "emojis": []}
+        headline = EMOJI_RE.sub("", headline).strip()
+    subline = str(plan.get("subline", "")).strip()
+    if theme.get("upper"):
+        headline = headline.upper()
+
+    img = _gradient(*theme["grad"])
+    _paint(img, kind, theme, headline)
+    draw = ImageDraw.Draw(img)
+
+    if kind == "solemn":
+        label = str(plan.get("chip") or "SHRADDHANJALI").upper()
+        font = pick_font("medium", 30, label)
+        spaced = " ".join(label)
+        draw.text(((W - draw.textlength(spaced, font=font)) / 2, 310), spaced, font=font, fill=(150, 150, 150))
+    elif theme.get("chip"):
+        chip = str(plan.get("chip") or theme["chip"])[:28]
+        if kind in ("celebration", "congrats") and not plan.get("chip"):
+            chip = theme["chip"]
+        _chip(img, draw, theme, chip.upper() if not EMOJI_RE.search(chip) else chip)
+
+    ty = _place_photo(img, kind, theme, photo_bytes) if photo_bytes else _place_hero_emoji(img, kind, theme, plan)
+    draw = ImageDraw.Draw(img)
+    shadow = None if kind == "solemn" else (0, 0, 0, 90)
+    style = theme["style"]
+    font, lines = wrap_fit(draw, headline, style, 88 if photo_bytes else 96, 54, W - 200, 3 if not photo_bytes else 2)
+    y = draw_block(img, draw, lines, font, theme["text"], ty, int(font.size * 1.22), shadow=shadow)
+    if kind == "solemn":
+        draw.line((W / 2 - 60, y + 14, W / 2 + 60, y + 14), fill=(120, 120, 120), width=2)
+        y += 40
+    if subline:
+        sfont, slines = wrap_fit(draw, subline, "light" if kind == "solemn" else "medium", 40, 30, W - 220, 2)
+        draw_block(img, draw, slines, sfont, theme["sub"], y + 14, int(sfont.size * 1.4))
+
+    credit = str(plan.get("photo_credit") or "").strip()
+    foot = " | ".join(p for p in (credit if photo_bytes else "", footer) if p)[:90]
+    if foot:
+        ffont = pick_font("light", 24, foot)
+        draw.text(((W - draw.textlength(foot, font=ffont)) / 2, 1478), foot, font=ffont,
+                  fill=(140, 140, 140) if kind == "solemn" else theme["sub"])
+    bfont = pick_font("bold", 26, brand)
+    mark = brand[:18].upper()
+    draw.text(((W - draw.textlength(mark, font=bfont)) / 2, 1510), mark, font=bfont,
+              fill=(110, 110, 110) if kind == "solemn" else theme["sub"])
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.convert("RGB").save(out, "JPEG", quality=92, optimize=True)
+    return out

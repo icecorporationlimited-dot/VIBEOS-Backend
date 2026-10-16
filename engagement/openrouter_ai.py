@@ -91,6 +91,28 @@ class OpenRouterAI:
             raise OpenRouterError("OpenRouter returned an empty reply.")
         return answer[:limit]
 
+    def chat(self, system, user, *, temperature=0.5, max_tokens=400):
+        """Generic single-turn completion (used by the Story planner). Returns raw text."""
+        if not self.ready:
+            raise OpenRouterError("OPENROUTER_API_KEY is not configured.")
+        try:
+            response = self.http.post(
+                API_URL,
+                headers={"Authorization": f"Bearer {self.api_key}",
+                         "Content-Type": "application/json", "X-OpenRouter-Title": "VIBEOS"},
+                json={"model": self.model,
+                      "messages": [{"role": "system", "content": str(system)[:4000]},
+                                   {"role": "user", "content": str(user)[:6000]}],
+                      "temperature": max(0.0, min(float(temperature), 1.0)),
+                      "max_tokens": max(50, min(int(max_tokens), 800))},
+                timeout=self.timeout)
+            response.raise_for_status()
+            choices = response.json().get("choices") or []
+            return (choices[0].get("message", {}).get("content") if choices else "") or ""
+        except Exception as exc:
+            logger.warning("OpenRouter chat failed (%s)", type(exc).__name__)
+            raise OpenRouterError("OpenRouter request failed; check key, model and quota.") from None
+
     @staticmethod
     def _clean(value, limit):
         # Strip control characters and keep prompts bounded.
