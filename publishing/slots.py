@@ -87,3 +87,36 @@ class Calendar:
                     continue
                 return cand
         return None
+
+    def companion_slot(self, telegram_id, photo_slot):
+        """Slot for a Story that accompanies a photo already scheduled at
+        `photo_slot`: same local day, at least the minimum gap later, never in
+        quiet hours, never over the daily limit. None = no room that day.
+        """
+        principal = (telegram_id if isinstance(telegram_id, Principal)
+                     else Principal.from_telegram(telegram_id))
+        s = self.autopilot.get(principal)
+        tz = get_zone(self.tz_for(principal.subject))
+        now = self.clock()
+        base = _aware(photo_slot).astimezone(tz)
+        gap = timedelta(minutes=max(int(s["min_gap_minutes"]), 60))
+        busy = self._busy_times(telegram_id)
+        start, end = day_bounds(base)
+        if len([t for t in busy if start <= t < end]) >= s["daily_limit"]:
+            return None
+        times = sorted(tuple(int(x) for x in slot.split(":")) for slot in s["slots"])
+        cands = [datetime.combine(base.date(), time(hh, mm), tzinfo=tz) for hh, mm in times]
+        cands = [c for c in cands if c - base >= gap]
+        cands.append(base + timedelta(hours=3))      # fallback when no later preset slot
+        for local in cands:
+            if local.date() != base.date():
+                continue
+            cand = local.astimezone(timezone.utc)
+            if cand <= now + timedelta(minutes=1):
+                continue
+            if in_quiet(local, s["quiet_start"], s["quiet_end"]):
+                continue
+            if any(abs(cand - t) < gap for t in busy):
+                continue
+            return cand
+        return None
