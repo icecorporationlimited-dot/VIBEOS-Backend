@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 settings_local.py
 .env
+
+vibeos_local_data/
