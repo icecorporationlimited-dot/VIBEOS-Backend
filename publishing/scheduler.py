@@ -402,7 +402,8 @@ class Worker:
         meta = {"event_status": "disabled"}
         slot = None
         decision = route.get("decision") or {}
-        if self.planner is not None and decision.get("event_key") and len(route["asset_ids"]) == 1:
+        if (self.planner is not None and len(route["asset_ids"]) == 1
+                and route.get("format") in ("photo", "story")):
             asset = self.buffer.assets.find_one({"_id": route["asset_ids"][0]})
             try:
                 slot, meta = self.planner.schedule_for(tg, asset)
