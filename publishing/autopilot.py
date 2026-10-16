@@ -23,6 +23,8 @@ DEFAULTS = {
     "enabled": False,
     "full_auto": False,
     "trend_stories": "off",      # off | auto  (needs autopilot on; Story format allowed)
+    "auto_replies": False,       # AI replies to comments on the user's own media
+    "auto_comments": False,      # AI adds a starter comment to newly published posts
     "paused": False,
     "daily_limit": 2,
     "quiet_start": 23,
@@ -50,7 +52,7 @@ def _int(value, lo, hi, name):
 
 
 def _clean(field, value):
-    if field in ("enabled", "paused", "full_auto"):
+    if field in ("enabled", "paused", "full_auto", "auto_replies", "auto_comments"):
         return bool(value)
     if field == "trend_stories":
         mode = str(value).lower()
@@ -152,6 +154,8 @@ HELP = (
     "/autopilot slots 12:30 19:30 — preferred times\n"
     "/autopilot formats photo story carousel reel\n"
     "/autopilot trends auto | off — auto-post a Story for safe trending topics\n"
+    "/autopilot replies auto | off — AI replies to comments on your own posts\n"
+    "/autopilot comments auto | off — AI posts a starter comment on new posts\n"
     "/autopilot block war politics — hold posts with these words\n"
     "/autopilot unblock politics"
 )
@@ -168,6 +172,8 @@ def describe(s: dict) -> str:
         f"• slots: {', '.join(s['slots'])}\n"
         f"• formats: {', '.join(s['formats'])}\n"
         f"• trend stories: {s['trend_stories']}\n"
+        f"• AI comment replies: {'on' if s.get('auto_replies') else 'off'}\n"
+        f"• AI starter comments: {'on' if s.get('auto_comments') else 'off'}\n"
         f"• blocked: {', '.join(s['blocked_topics']) or '—'}\n\n"
         "Change with /autopilot help"
     )
@@ -213,6 +219,12 @@ def handle_command(store: AutopilotStore, telegram_id, args) -> str:
                         "never politics, courts, crime, deaths or your blocked topics. "
                         "Needs /autopilot on and the story format. /pause stops everything.")
             return "⚪ Trend Stories off."
+        if cmd in ("replies", "comments") and len(rest) == 1 and rest[0].lower() in ("auto", "off"):
+            field = "auto_replies" if cmd == "replies" else "auto_comments"
+            enabled = rest[0].lower() == "auto"
+            store.update(telegram_id, **{field: enabled})
+            label = "AI comment replies" if cmd == "replies" else "AI starter comments"
+            return f"{'🟢' if enabled else '⚪'} {label} {'enabled' if enabled else 'disabled'}."
         if cmd == "formats" and rest:
             s = store.update(telegram_id, formats=rest)
             return "✅ Allowed formats: " + ", ".join(s["formats"])
