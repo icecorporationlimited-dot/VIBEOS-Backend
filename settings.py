@@ -16,6 +16,8 @@ BOT_TOKEN = _env("BOT_TOKEN")
 MONGODB_URI = _env("MONGODB_URI")
 GROQ_API_KEY = _env("GROQ_API_KEY")
 VISION_MODEL = _env("VISION_MODEL", "qwen/qwen3.8-27b")
+OPENROUTER_API_KEY = "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"
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
 
 # ---------------- Instagram publishing ----------------
 META_APP_ID = _env("META_APP_ID")
