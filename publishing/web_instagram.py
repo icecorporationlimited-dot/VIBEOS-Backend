@@ -66,10 +66,28 @@ class WebInstagramConnect:
         csrf_cookie = _cookie(cookie_header, CSRF_COOKIE)
         csrf_form = (form.get("csrf_token") or [""])[0]
         principal = self.sessions.resolve(session_token)
-        if (origin != self.origin or not principal or not csrf_cookie or not csrf_form or
-                not hmac.compare_digest(csrf_cookie, csrf_form) or
-                not self.sessions.validate_csrf(session_token, csrf_form)):
-            return 403, _page("Request rejected", "Please return to VIBEOS and try again."), {}
+        why = []
+        if origin != self.origin:
+            why.append("origin=%r expected=%r" % (origin, self.origin))
+        if not session_token:
+            why.append("no session cookie")
+        elif not principal:
+            why.append("session not resolved")
+        if not csrf_cookie:
+            why.append("no csrf cookie")
+        if not csrf_form:
+            why.append("no csrf form field")
+        if csrf_cookie and csrf_form and not hmac.compare_digest(csrf_cookie, csrf_form):
+            why.append("csrf cookie != form")
+        try:
+            if principal and csrf_form and not self.sessions.validate_csrf(session_token, csrf_form):
+                why.append("validate_csrf False")
+        except Exception as exc:
+            why.append("validate_csrf error %r" % (exc,))
+        if why:
+            import logging
+            logging.getLogger(__name__).warning("IG CONNECT REJECTED: %s", "; ".join(why))
+            return 403, _page("Request rejected", "DEBUG: " + "; ".join(why)), {}
         state = secrets.token_urlsafe(32)
         now = self.clock()
         self.transactions.insert_one({
