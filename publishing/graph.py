@@ -84,6 +84,33 @@ class GraphClient:
         total = (row.get("config") or {}).get("quota_total")
         return {"usage": row.get("quota_usage", 0), "total": total}
 
+    # ---- comments and owned media (requires Instagram manage-comments scope) ----
+    def list_media(self, ig_id, token, limit=10):
+        body = self._call("GET", self._url(f"{ig_id}/media"), {
+            "fields": "id,caption,permalink,timestamp",
+            "limit": max(1, min(int(limit), 25)), "access_token": token})
+        return body.get("data") or []
+
+    def list_comments(self, media_id, token, limit=50):
+        body = self._call("GET", self._url(f"{media_id}/comments"), {
+            "fields": "id,text,timestamp,username",
+            "limit": max(1, min(int(limit), 100)), "access_token": token})
+        return body.get("data") or []
+
+    def create_comment(self, media_id, message, token):
+        text = str(message or "").strip()
+        if not text or len(text) > 2000:
+            raise ValueError("Comment must contain 1–2000 characters.")
+        return self._call("POST", self._url(f"{media_id}/comments"), {
+            "message": text, "access_token": token})
+
+    def reply_to_comment(self, comment_id, message, token):
+        text = str(message or "").strip()
+        if not text or len(text) > 2000:
+            raise ValueError("Reply must contain 1–2000 characters.")
+        return self._call("POST", self._url(f"{comment_id}/replies"), {
+            "message": text, "access_token": token})
+
     # ---- containers ------------------------------------------------------
     def create_container(self, ig_id, token, *, image_url=None, caption=None,
                          media_type=None, children=None, carousel_item=False,
