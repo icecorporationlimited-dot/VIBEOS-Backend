@@ -384,7 +384,7 @@ class Worker:
                         tags.append(t)
             creative = best.get("creative") or {}
             res = self.buffer.add_reel(
-                tg, data, meta=meta, caption=creative.get("caption", ""), hashtags=tags[:15],
+                tg, data, meta=meta, caption=creative.get("caption", ""), hashtags=tags[:svc.HASHTAG_LIMIT],
                 vibe=creative.get("vibe", "natural"), source_ids=route["asset_ids"],
                 batch_id=best.get("batch_id"))
         except Exception:

@@ -33,7 +33,8 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 import settings
-from editor import edit_photo
+import copywriter
+from editor import edit_photo, STYLES as EDITOR_STYLES
 from content_buffer import ContentBuffer, GridFSBlobStore
 import memory
 import publish_bot
@@ -143,24 +144,10 @@ def clamp_score(value):
 
 
 def clean_hashtags(value):
-    if not isinstance(value, list):
-        return []
-
-    cleaned = []
-
-    for item in value:
-        tag = str(item).strip().replace(" ", "")
-
-        if not tag:
-            continue
-
-        if not tag.startswith("#"):
-            tag = "#" + tag
-
-        if tag not in cleaned:
-            cleaned.append(tag[:60])
-
-    return cleaned[:15]
+    """Instagram allows max 5 hashtags per post, so never keep more."""
+    return copywriter.sanitize_hashtags(
+        value, limit=copywriter.HASHTAG_LIMIT, drop_generic=False
+    )
 
 
 async def download_telegram_photo(context, file_id):
@@ -436,11 +423,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🗂️ /photos — view your saved photo IDs\n"
         "🗑️ /deletephoto ID — delete one photo\n"
         "⚠️ /deleteallphotos confirm — delete all your photo data\n\n"
-        "🎨 /vibe baddie | soft | moody | natural\n\n"
-        "✍️ /caption baddie\n"
-        "✍️ /caption soft\n"
-        "✍️ /caption funny\n"
-        "🏷️ /hashtags\n\n"
+        "🎨 /vibe baddie | soft | moody | natural | golden | clean | film\n\n"
+        "✍️ /caption baddie  (styles: baddie soft funny natural moody golden clean film)\n"
+        "✍️ /caption baddie hinglish  (Hinglish caption)\n"
+        "🏷️ /hashtags  (5 precise tags, Instagram's limit)\n\n"
         "🔥 /trends\n"
         "✨ /trendcaption\n\n"
         "🧩 /grid\n"
@@ -457,8 +443,8 @@ async def vibe_command(update, context):
     if not context.args:
         await update.message.reply_text(
             f"Current vibe: {get_user_vibe(user_id)}\n"
-            "Use /vibe baddie, /vibe soft, "
-            "/vibe moody or /vibe natural."
+            "Choose: " + ", ".join(EDITOR_STYLES) + ".\n"
+            "Example: /vibe golden"
         )
         return
 
@@ -466,7 +452,7 @@ async def vibe_command(update, context):
         vibe = memory.save_vibe(user_id, context.args[0])["vibe"]
     except ValueError:
         await update.message.reply_text(
-            "Choose: baddie, soft, moody, natural."
+            "Choose: " + ", ".join(EDITOR_STYLES) + "."
         )
         return
 
@@ -544,13 +530,23 @@ Return ONLY JSON:
 # SMART CAPTION + HASHTAG GENERATION
 # =========================================================
 
-CAPTION_STYLES = {
-    "baddie": "confident, bold, short, playful and stylish",
-    "soft": "dreamy, gentle, minimal and aesthetic",
-    "funny": "witty, relatable, casual and humorous",
-    "natural": "authentic, casual and simple",
-    "moody": "cinematic, understated and atmospheric",
-}
+CAPTION_STYLES = copywriter.CAPTION_STYLES
+CAPTION_LANGUAGE = getattr(settings, "CAPTION_LANGUAGE", "english")  # english | hinglish
+
+
+def recent_captions_for(user_id, limit=8):
+    """Last captions of this user, so the AI does not repeat itself."""
+    if user_id is None:
+        return []
+    try:
+        rows = photos.find(
+            {"telegram_id": str(user_id), "caption": {"$exists": True}},
+            {"caption": 1},
+        ).sort("created_at", -1).limit(limit)
+        return [r.get("caption", "") for r in rows]
+    except Exception:
+        logger.exception("Could not load recent captions")
+        return []
 
 
 async def generate_social_copy(
@@ -558,86 +554,43 @@ async def generate_social_copy(
     vibe,
     mode,
     trend_context=None,
+    user_id=None,
+    language=None,
 ):
-    style = CAPTION_STYLES.get(
-        mode,
-        CAPTION_STYLES.get(
-            vibe,
-            CAPTION_STYLES["natural"],
-        ),
+    prompt = copywriter.build_prompt(
+        mode=mode,
+        vibe=vibe,
+        language=language or CAPTION_LANGUAGE,
+        trend_context=trend_context,
+        recent_captions=recent_captions_for(user_id),
     )
+    image_url = "data:image/jpeg;base64," + image_to_base64(image_bytes)
+    last_error = None
 
-    prompt = f"""
-You are VibeOS Smart Caption & Hashtag Engine.
+    # One retry: vision models sometimes return broken JSON.
+    for attempt in range(2):
+        try:
+            response = await asyncio.to_thread(
+                groq_client.chat.completions.create,
+                model=MODEL,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }],
+                temperature=0.9 if attempt == 0 else 0.6,
+            )
+            data = parse_ai_json(response.choices[0].message.content)
+            parsed = copywriter.parse_copy(data, mode=mode)
+            parsed["overlay"] = clean_overlay(data.get("overlay", ""))
+            return parsed
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Caption attempt %s failed: %s", attempt + 1, exc)
 
-User's selected caption style: {mode}
-Style description: {style}
-Photo vibe: {vibe}
-
-Trend inspiration:
-{trend_context or "No trend inspiration provided."}
-
-Use trend inspiration naturally when relevant.
-Do not claim audio is currently popular or trending unless verified.
-Do not include audio names unless they fit naturally.
-
-Generate original social-media copy that fits the image.
-Do not invent events, locations, relationships or facts.
-Do not identify the person or infer sensitive information.
-Avoid body comparisons and appearance judgments.
-
-Return ONLY valid JSON:
-{{
-  "caption": "one original caption",
-  "overlay": "short 3-6 word line to print on the photo",
-  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
-}}
-
-Requirements:
-- Keep the caption concise and natural.
-- The overlay is a short, punchy 3-6 word line for the photo itself,
-  lowercase, no emoji, no hashtags, no quotation marks.
-- Avoid generic filler when a visual detail is available.
-- No quotation marks around the caption.
-- Generate relevant hashtags without trend guarantees.
-- Maximum 10 hashtags.
-"""
-
-    response = await asyncio.to_thread(
-        groq_client.chat.completions.create,
-        model=MODEL,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "data:image/jpeg;base64,"
-                        + image_to_base64(image_bytes)
-                    },
-                },
-            ],
-        }],
-        temperature=0.85,
-    )
-
-    data = parse_ai_json(
-        response.choices[0].message.content
-    )
-
-    caption = str(data.get("caption", "")).strip()
-    hashtags = clean_hashtags(data.get("hashtags", []))
-
-    if not caption:
-        raise ValueError("AI returned an empty caption")
-
-    return {
-        "caption": caption[:1000],
-        "hashtags": hashtags,
-        "caption_style": mode,
-        "overlay": clean_overlay(data.get("overlay", "")),
-    }
+    raise ValueError(f"AI caption failed: {last_error}")
 
 
 async def update_social_copy(
@@ -649,12 +602,15 @@ async def update_social_copy(
     trend_context=None,
     update_overlay=False,
     refresh_preview=True,
+    language=None,
 ):
     result = await generate_social_copy(
         image_bytes,
         photo_doc.get("vibe", DEFAULT_VIBE),
         style,
         trend_context=trend_context,
+        user_id=photo_doc.get("telegram_id"),
+        language=language,
     )
 
     fields = {
@@ -699,18 +655,21 @@ async def caption_command(update, context):
 
     if not context.args:
         await update.message.reply_text(
-            "Usage:\n"
-            "/caption baddie\n"
-            "/caption soft\n"
-            "/caption funny"
+            "Usage: /caption <style> [hinglish]\n\n"
+            "Styles: " + ", ".join(CAPTION_STYLES) + "\n"
+            "Example: /caption baddie hinglish"
         )
         return
 
     style = context.args[0].lower()
+    language = "hinglish" if any(
+        a.lower() in {"hinglish", "hindi"} for a in context.args[1:]
+    ) else ("english" if any(
+        a.lower() == "english" for a in context.args[1:]) else None)
 
-    if style not in {"baddie", "soft", "funny"}:
+    if style not in CAPTION_STYLES:
         await update.message.reply_text(
-            "Choose a style: baddie, soft, funny."
+            "Choose a style: " + ", ".join(CAPTION_STYLES) + "."
         )
         return
 
@@ -743,6 +702,7 @@ async def caption_command(update, context):
             style,
             update,
             context,
+            language=language,
         )
 
         await status.edit_text(
@@ -915,7 +875,7 @@ Return ONLY JSON:
   "filter": "{vibe}"
 }}
 
-Allowed filters: natural, baddie, soft, moody.
+Allowed filters: {", ".join(EDITOR_STYLES)}.
 Focus on composition, lighting, colors and environment.
 Do not identify the person or infer sensitive information.
 """
@@ -944,9 +904,7 @@ Do not identify the person or infer sensitive information.
             response.choices[0].message.content
         )
 
-        if data.get("filter") not in {
-            "natural", "baddie", "soft", "moody"
-        }:
+        if data.get("filter") not in EDITOR_STYLES:
             data["filter"] = vibe
 
         return data
@@ -978,6 +936,7 @@ async def send_preview(
         image_bytes,
         vibe,
         vibe if vibe in CAPTION_STYLES else "natural",
+        user_id=update.effective_user.id,
     )
 
     overlay = social_copy.get("overlay", "")
@@ -1191,7 +1150,8 @@ async def auto_prepare(user_id, image_bytes, file_id, asset_id, vibe):
     """FULL AUTO: analyze -> caption -> edit -> mark publish-ready. No approval."""
     analysis = await analyze_photo(image_bytes, vibe)
     social_copy = await generate_social_copy(
-        image_bytes, vibe, vibe if vibe in CAPTION_STYLES else "natural"
+        image_bytes, vibe, vibe if vibe in CAPTION_STYLES else "natural",
+        user_id=user_id,
     )
     style = analysis.get("filter", vibe)
     overlay = social_copy.get("overlay") or None

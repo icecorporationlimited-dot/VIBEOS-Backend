@@ -61,7 +61,7 @@ MAX_ATTEMPTS = 5
 PUBLISH_SETTLE_SECONDS = 120
 BACKOFF = (120, 300, 900, 3600, 7200)   # seconds, per attempt
 IG_MAX_JPEG_BYTES = 8 * 1024 * 1024
-CAPTION_LIMIT, HASHTAG_LIMIT = 2200, 30
+CAPTION_LIMIT, HASHTAG_LIMIT = 2200, 5   # Instagram cap since Dec 2025
 
 
 class PublishError(Exception):

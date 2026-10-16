@@ -55,15 +55,16 @@ def edit_photo_adaptive(
 
     analysis = analyze_photo(image_bytes)
     plan = build_edit_plan(analysis, vibe=vibe)
-    base = base_edit_photo(
+    # editor.edit_photo now does the per-image fixing itself (white balance,
+    # adaptive exposure, shadow/highlight recovery, denoise, subject-aware
+    # crop). Running _apply_corrections on top would correct the photo twice,
+    # so it is no longer applied here; the plan is kept for the report only.
+    result, edit_report = base_edit_photo(
         image_bytes, style=vibe, size=size, text=text,
         text_style=text_style, text_position=text_position,
+        return_report=True,
     )
-    base_bytes = base.getvalue() if hasattr(base, "getvalue") else bytes(base)
-    corrected = _apply_corrections(base_bytes, plan)
-
-    result = io.BytesIO(corrected)
     result.seek(0)
     if return_report:
-        return result, {"analysis": analysis, "edit_plan": plan}
+        return result, {"analysis": analysis, "edit_plan": plan, "auto_fix": edit_report}
     return result

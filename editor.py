@@ -1,7 +1,16 @@
 """
 VibeOS Pro Editor
-Celebrity-style photo finishing: smart crop, color grading, glow, vignette,
-film grain, sharpening and clean text overlays.
+Photo finishing that fixes the photo first, then applies the look:
+
+  1. subject-aware crop (face detection when OpenCV is installed, otherwise a
+     built-in saliency/skin map) so heads are never cut in 4:5 / 9:16 crops
+  2. auto fix: white balance, adaptive exposure, shadow lift, highlight
+     recovery, chroma denoise for noisy night shots
+  3. style grade: S-curve, vibrance (skin-safe), split-tone, fade, clarity
+  4. finish: bloom, vignette, grain, resolution-aware sharpening, text overlay
+
+Only Pillow + NumPy are required. OpenCV (opencv-python-headless) is optional
+and is picked up automatically for better face detection.
 
 Usage:
     from editor import edit_photo
@@ -16,6 +25,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+try:  # optional: better face detection
+    import cv2  # type: ignore
+except Exception:  # pragma: no cover - depends on host
+    cv2 = None
+
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 
 # Output sizes (Instagram native)
@@ -28,30 +42,51 @@ SIZES = {
 # ---------------------------------------------------------------------------
 # Grading presets
 # exposure: brightness multiplier | contrast: 0-0.5 S-curve strength
-# saturation: 1 = unchanged | warmth: +warm / -cool
-# fade: lifts blacks (matte look) | shadows/highlights: RGB split-tone
+# saturation: 1 = unchanged (>1 is applied as skin-safe vibrance)
+# warmth: +warm / -cool | fade: lifts blacks (matte look)
+# shadows/highlights: RGB split-tone | clarity: local contrast (0-0.5)
+# target: auto-exposure aim (median brightness, default 0.46)
 # bloom: glow on highlights | vignette | grain | sharpen: unsharp percent
 # ---------------------------------------------------------------------------
 STYLES = {
     "natural": dict(
-        exposure=1.03, contrast=0.14, saturation=1.08, warmth=0.015,
+        exposure=1.02, contrast=0.14, saturation=1.10, warmth=0.015,
         fade=0.0, shadows=(0, 0, 0), highlights=(0, 0, 0),
-        bloom=0.10, vignette=0.12, grain=0.010, sharpen=70,
+        clarity=0.10, bloom=0.08, vignette=0.10, grain=0.008, sharpen=70,
     ),
     "baddie": dict(
-        exposure=1.02, contrast=0.30, saturation=1.14, warmth=0.040,
+        exposure=1.02, contrast=0.30, saturation=1.18, warmth=0.040,
         fade=0.01, shadows=(-0.015, 0.0, 0.03), highlights=(0.035, 0.012, -0.02),
-        bloom=0.28, vignette=0.22, grain=0.016, sharpen=90,
+        clarity=0.18, bloom=0.26, vignette=0.22, grain=0.014, sharpen=90,
     ),
     "soft": dict(
-        exposure=1.05, contrast=0.06, saturation=0.92, warmth=0.030,
+        exposure=1.05, contrast=0.06, saturation=0.94, warmth=0.030,
         fade=0.08, shadows=(0.02, 0.0, 0.02), highlights=(0.03, 0.01, 0.015),
-        bloom=0.42, vignette=0.06, grain=0.008, sharpen=40,
+        clarity=0.0, bloom=0.40, vignette=0.06, grain=0.008, sharpen=40,
     ),
     "moody": dict(
-        exposure=0.93, contrast=0.34, saturation=0.82, warmth=-0.005,
+        target=0.36,   # keep the dark mood: auto-exposure aims lower
+        exposure=0.93, contrast=0.34, saturation=0.84, warmth=-0.005,
         fade=0.035, shadows=(-0.03, 0.012, 0.045), highlights=(0.045, 0.015, -0.035),
-        bloom=0.14, vignette=0.38, grain=0.030, sharpen=80,
+        clarity=0.16, bloom=0.14, vignette=0.38, grain=0.028, sharpen=80,
+    ),
+    # warm golden-hour glow
+    "golden": dict(
+        exposure=1.04, contrast=0.18, saturation=1.16, warmth=0.075,
+        fade=0.02, shadows=(0.02, 0.005, -0.015), highlights=(0.05, 0.022, -0.04),
+        clarity=0.10, bloom=0.34, vignette=0.14, grain=0.010, sharpen=70,
+    ),
+    # bright, airy, polished (skincare / minimal feeds)
+    "clean": dict(
+        exposure=1.07, contrast=0.12, saturation=1.0, warmth=-0.006,
+        fade=0.0, shadows=(0.012, 0.012, 0.02), highlights=(0, 0, 0),
+        clarity=0.14, bloom=0.18, vignette=0.0, grain=0.0, sharpen=85,
+    ),
+    # analog film: lifted blacks, green-teal shadows, warm highlights
+    "film": dict(
+        exposure=1.0, contrast=0.20, saturation=0.92, warmth=0.022,
+        fade=0.06, shadows=(-0.012, 0.018, 0.012), highlights=(0.04, 0.02, -0.02),
+        clarity=0.04, bloom=0.16, vignette=0.20, grain=0.032, sharpen=50,
     ),
 }
 
@@ -59,7 +94,7 @@ LUMA = np.array([0.299, 0.587, 0.114], dtype=np.float32)
 
 
 # ---------------------------------------------------------------------------
-# Loading + cropping
+# Loading
 # ---------------------------------------------------------------------------
 def _load(image_bytes, max_side=2600):
     img = Image.open(io.BytesIO(image_bytes))
@@ -69,19 +104,220 @@ def _load(image_bytes, max_side=2600):
     return img
 
 
-def _smart_crop(img, size):
-    # centering y=0.38 keeps heads/faces from being cut in portrait crops
-    return ImageOps.fit(
-        img, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.38)
-    )
+def _blur_map(m, radius):
+    """Gaussian-blur a 0..1 float map using PIL (fast, no SciPy needed)."""
+    im = Image.fromarray((np.clip(m, 0, 1) * 255).astype(np.uint8))
+    return np.asarray(im.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255.0
+
+
+def _skin_mask(a):
+    """Rough skin-tone mask (0/1). Used to protect faces from over-saturation,
+    harsh clarity and yellow highlight tint, and as a people cue for cropping."""
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    mx = a.max(-1)
+    d = mx - a.min(-1)
+    sat = d / (mx + 1e-6)
+    h6 = (g - b) / (d + 1e-6)          # hue in sixths; 0..0.85 is red-orange
+    skin = (r >= g) & (g >= b) & (h6 <= 0.85) & (sat > 0.12) & (sat < 0.75) & (mx > 0.25)
+    return skin.astype(np.float32)
+
+
+def _skin_soft(a):
+    h, w, _ = a.shape
+    return _blur_map(_skin_mask(a), max(1.0, max(w, h) * 0.004))
 
 
 # ---------------------------------------------------------------------------
-# Color pipeline (float32 arrays, 0..1)
+# Subject-aware crop
 # ---------------------------------------------------------------------------
+_FACE_CASCADE = None
+
+
+def _face_focus(img):
+    """(cx, cy, w, h) of the face group, all 0..1, or None. Needs OpenCV."""
+    global _FACE_CASCADE
+    if cv2 is None:
+        return None
+    try:
+        if _FACE_CASCADE is None:
+            path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            casc = cv2.CascadeClassifier(path)
+            _FACE_CASCADE = casc if not casc.empty() else False
+        if _FACE_CASCADE is False:
+            return None
+        small = img.copy()
+        small.thumbnail((640, 640))
+        gray = cv2.equalizeHist(cv2.cvtColor(np.asarray(small), cv2.COLOR_RGB2GRAY))
+        sh, sw = gray.shape
+        min_side = max(24, int(min(sh, sw) * 0.08))
+        faces = _FACE_CASCADE.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=6, minSize=(min_side, min_side))
+        if len(faces) == 0:
+            return None
+        biggest = max(int(f[2]) * int(f[3]) for f in faces)
+        keep = [f for f in faces if int(f[2]) * int(f[3]) >= 0.3 * biggest]
+        x0 = min(int(f[0]) for f in keep)
+        y0 = min(int(f[1]) for f in keep)
+        x1 = max(int(f[0]) + int(f[2]) for f in keep)
+        y1 = max(int(f[1]) + int(f[3]) for f in keep)
+        return ((x0 + x1) / 2 / sw, (y0 + y1) / 2 / sh, (x1 - x0) / sw, (y1 - y0) / sh)
+    except Exception:
+        return None
+
+
+def _saliency_focus(img):
+    """Pure-NumPy fallback: where is the subject? Edges + skin tones, with a
+    mild centre prior so the crop never runs off to a corner."""
+    small = img.copy()
+    small.thumbnail((160, 160))
+    a = np.asarray(small, dtype=np.float32) / 255.0
+    lum = a @ LUMA
+    gy, gx = np.gradient(lum)
+    edge = _blur_map(np.hypot(gx, gy) / (np.hypot(gx, gy).max() + 1e-6), 3)
+    skin = _blur_map(_skin_mask(a), 3)
+    sal = edge * 0.6 + skin * 0.9
+    h, w = sal.shape
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    xn, yn = (x + 0.5) / w, (y + 0.5) / h
+    prior = np.exp(-(((xn - 0.5) / 0.45) ** 2 + ((yn - 0.5) / 0.45) ** 2))
+    wts = (sal * (0.4 + 0.6 * prior)) ** 2
+    total = float(wts.sum())
+    if total <= 1e-6:
+        return (0.5, 0.5)
+    return (float((wts * xn).sum() / total), float((wts * yn).sum() / total))
+
+
+def _find_focus(img):
+    """-> (fx, fy, fw, fh, source) with source in face | saliency."""
+    face = _face_focus(img)
+    if face:
+        return (*face, "face")
+    fx, fy = _saliency_focus(img)
+    return (fx, fy, 0.0, 0.0, "saliency")
+
+
+def _crop_box(w, h, target, focus):
+    """Float crop box (l, t, r, b) with the target aspect, centred on the subject."""
+    tw, th = target
+    tr, r = tw / th, w / h
+    if abs(r - tr) < 0.004:
+        return (0.0, 0.0, float(w), float(h))
+    fx, fy, fw, fh, src = focus
+    if r > tr:                                   # too wide: trim the sides
+        nw = h * tr
+        x0 = min(max(fx * w - nw / 2, 0.0), w - nw)
+        return (x0, 0.0, x0 + nw, float(h))
+    nh = w / tr                                  # too tall: trim top/bottom
+    anchor = 0.36 if src == "face" else 0.42     # subject sits a bit above centre
+    y0 = fy * h - anchor * nh
+    if src == "face":                            # never cut the head or chin
+        top, bottom = (fy - fh / 2) * h, (fy + fh / 2) * h
+        y0 = min(y0, top - 0.05 * nh)
+        y0 = max(y0, bottom + 0.05 * nh - nh)
+    y0 = min(max(y0, 0.0), h - nh)
+    return (0.0, y0, float(w), y0 + nh)
+
+
+def _smart_crop(img, size, report=None):
+    w, h = img.size
+    tw, th = size
+    if abs(w / h - tw / th) < 0.004:
+        box, src = (0.0, 0.0, float(w), float(h)), "none"
+    else:
+        focus = _find_focus(img)
+        box, src = _crop_box(w, h, size, focus), focus[4]
+    if report is not None:
+        report["crop"] = src
+    return img.resize(size, Image.Resampling.LANCZOS, box=box)
+
+
+# ---------------------------------------------------------------------------
+# Auto fix (runs before the style): the photo is repaired, then styled
+# ---------------------------------------------------------------------------
+def _sample(a, step=4):
+    return a[::step, ::step]
+
+
+def _estimate_noise(img):
+    """Rough luma noise sigma (0..1) from flat areas. Higher = noisier."""
+    g = np.asarray(img.convert("L"), dtype=np.float32)[::2, ::2] / 255.0
+    if min(g.shape) < 8:
+        return 0.0
+    hp = g[1:-1, 1:-1] - (g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:]) / 4
+    gy, gx = np.gradient(g)
+    grad = np.hypot(gx, gy)[1:-1, 1:-1]
+    flat = grad < np.percentile(grad, 40)
+    if int(flat.sum()) < 100:
+        return 0.0
+    return float(np.median(np.abs(hp[flat])) / 0.6745 * 0.894)
+
+
+def _denoise(img):
+    """Chroma blur + light median on luma, only when the photo is noisy."""
+    sigma = _estimate_noise(img)
+    if sigma <= 0.010:
+        return img, sigma
+    k = min(1.0, (sigma - 0.010) / 0.03)
+    y, cb, cr = img.convert("YCbCr").split()
+    rad = 1.0 + 3.0 * k
+    cb, cr = cb.filter(ImageFilter.GaussianBlur(rad)), cr.filter(ImageFilter.GaussianBlur(rad))
+    y = Image.blend(y, y.filter(ImageFilter.MedianFilter(3)), 0.7 * k)
+    return Image.merge("YCbCr", (y, cb, cr)).convert("RGB"), sigma
+
+
+def _auto_white_balance(a, max_gain=0.10, strength=0.7):
+    """Gentle gray-world on neutral-ish mid-tones. Max +-7% so golden light
+    and intentional colour casts survive."""
+    s = _sample(a)
+    lum = s @ LUMA
+    mx, mn = s.max(-1), s.min(-1)
+    sat = (mx - mn) / (mx + 1e-6)
+    m = (lum > 0.15) & (lum < 0.85) & (sat < 0.35)
+    if float(m.mean()) < 0.05:
+        return a, (1.0, 1.0, 1.0)
+    means = s[m].mean(0)
+    gains = 1 + (means.mean() / (means + 1e-6) - 1) * strength
+    gains = np.clip(gains, 1 - max_gain, 1 + max_gain)
+    gains = gains / float(gains @ LUMA)            # keep brightness unchanged
+    return np.clip(a * gains, 0, 1), tuple(round(float(g), 3) for g in gains)
+
+
+def _auto_exposure(a, target=0.46, strength=0.7, lo=-0.6, hi=1.3):
+    """Move the median brightness toward `target` (0.46 = mid-grey) by a
+    fraction `strength` of the needed correction, in stops of linear light,
+    with a soft highlight shoulder so brightening does not clip."""
+    med = float(np.median(_sample(a) @ LUMA))
+    stops = hi if med <= 0.01 else float(2.2 * np.log2(target / med) * strength)
+    stops = max(lo, min(hi, stops))
+    if abs(stops) < 0.03:
+        return a, 0.0
+    lin = np.power(a, 2.2) * (2.0 ** stops)
+    t = np.clip(lin - 0.8, 0, None) / 0.2
+    lin = np.where(lin > 0.8, 0.8 + 0.2 * t / (1 + t), lin)   # shoulder, asymptote 1.0
+    return np.clip(np.power(lin, 1 / 2.2), 0, 1), round(stops, 3)
+
+
+def _recover_tones(a):
+    """Lift crushed shadows and pull back blown highlights, using a blurred
+    luminance mask so there are no halos."""
+    s = _sample(a) @ LUMA
+    p10 = float(np.percentile(s, 10))
+    clip_frac = float((s > 0.96).mean())
+    shadow_amt = min(1.0, max(0.0, (0.22 - p10) / 0.22)) * 0.45
+    high_amt = min(0.30, clip_frac * 3.0)
+    if shadow_amt < 0.02 and high_amt < 0.02:
+        return a, (0.0, 0.0)
+    h, w, _ = a.shape
+    lb = _blur_map(a @ LUMA, max(2.0, max(w, h) * 0.01))
+    gain = 1 + shadow_amt * 2.0 * (1 - lb) ** 3
+    gain = gain * (1 - high_amt * np.clip((lb - 0.7) / 0.3, 0, 1) ** 2)
+    return np.clip(a * gain[..., None], 0, 1), (round(shadow_amt, 3), round(high_amt, 3))
+
+
 def _auto_levels(a, low=0.5, high=99.5):
-    lo = np.percentile(a, low)
-    hi = np.percentile(a, high)
+    s = _sample(a, 3)
+    lo = np.percentile(s, low)
+    hi = np.percentile(s, high)
     if hi - lo < 0.2:  # flat image, don't over-stretch
         return a
     # gentle: only blend 60% of the stretch so it never looks crunchy
@@ -89,7 +325,25 @@ def _auto_levels(a, low=0.5, high=99.5):
     return a * 0.4 + stretched * 0.6
 
 
-def _grade(a, p):
+# ---------------------------------------------------------------------------
+# Style grade (float32 arrays, 0..1)
+# ---------------------------------------------------------------------------
+def _saturate(a, s):
+    """s < 1 desaturates evenly; s > 1 is vibrance: boosts dull colours more
+    than vivid ones and mostly leaves skin tones alone."""
+    if abs(s - 1.0) < 1e-3:
+        return a
+    lum = (a * LUMA).sum(-1, keepdims=True)
+    if s < 1:
+        return np.clip(lum + (a - lum) * s, 0, 1)
+    mx = a.max(-1, keepdims=True)
+    sat = (mx - a.min(-1, keepdims=True)) / (mx + 1e-6)
+    skin = _skin_mask(a)[..., None]
+    gain = 1 + (s - 1) * 1.35 * (1 - sat) ** 1.2 * (1 - 0.65 * skin)
+    return np.clip(lum + (a - lum) * gain, 0, 1)
+
+
+def _grade(a, p, skin):
     a = np.clip(a * p["exposure"], 0, 1)
 
     # S-curve contrast (smoothstep blend)
@@ -97,19 +351,18 @@ def _grade(a, p):
     s = a * a * (3 - 2 * a)
     a = a * (1 - c) + s * c
 
-    # saturation
-    lum = (a * LUMA).sum(-1, keepdims=True)
-    a = np.clip(lum + (a - lum) * p["saturation"], 0, 1)
+    a = _saturate(a, p["saturation"])
 
     # warmth
     w = p["warmth"]
     a[..., 0] += w
     a[..., 2] -= w
 
-    # split toning: tint shadows and highlights separately
+    # split toning: tint shadows and highlights separately.
+    # Highlight tint is halved on skin so faces never turn jaundiced.
     lum = (np.clip(a, 0, 1) * LUMA).sum(-1, keepdims=True)
     sh_w = (1 - lum) ** 2
-    hi_w = lum ** 2
+    hi_w = lum ** 2 * (1 - 0.5 * skin[..., None])
     a += sh_w * np.array(p["shadows"], dtype=np.float32)
     a += hi_w * np.array(p["highlights"], dtype=np.float32)
 
@@ -117,6 +370,17 @@ def _grade(a, p):
     f = p["fade"]
     a = a * (1 - f) + f
     return np.clip(a, 0, 1)
+
+
+def _clarity(a, amount, skin):
+    """Local contrast on mid-tones; reduced on skin so pores are not exaggerated."""
+    if amount <= 0:
+        return a
+    h, w, _ = a.shape
+    lum = a @ LUMA
+    detail = lum - _blur_map(lum, max(2.0, max(w, h) * 0.010))
+    weight = np.clip(1 - np.abs(lum - 0.5) * 1.5, 0.15, 1.0) * (1 - 0.6 * skin)
+    return np.clip(a + (detail * weight * amount * 1.6)[..., None], 0, 1)
 
 
 def _bloom(a, strength):
@@ -154,22 +418,31 @@ def _grain(a, amount, rng):
     return np.clip(a + noise * weight, 0, 1)
 
 
-def _apply_style(img, style):
+def _apply_style(img, style, report=None):
     p = STYLES.get(style, STYLES["natural"])
     rng = np.random.default_rng()
+
+    img, noise = _denoise(img)
     a = np.asarray(img, dtype=np.float32) / 255.0
 
+    a, wb = _auto_white_balance(a)
+    a, stops = _auto_exposure(a, target=p.get("target", 0.46))
+    a, rec = _recover_tones(a)
     a = _auto_levels(a)
-    a = _grade(a, p)
+    if report is not None:
+        report.update(noise=round(noise, 4), wb_gain=wb, exposure_stops=stops,
+                      shadow_lift=rec[0], highlight_recovery=rec[1])
+
+    skin = _skin_soft(a)
+    a = _grade(a, p, skin)
+    a = _clarity(a, p.get("clarity", 0.0), skin)
     a = _bloom(a, p["bloom"])
     a = _vignette(a, p["vignette"])
     a = _grain(a, p["grain"], rng)
 
     out = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
-    return out.filter(
-        ImageFilter.UnsharpMask(radius=1.6, percent=p["sharpen"], threshold=2)
-    )
-
+    radius = max(1.0, 0.0012 * max(out.size))      # same look at any resolution
+    return out.filter(ImageFilter.UnsharpMask(radius=radius, percent=p["sharpen"], threshold=2))
 
 # ---------------------------------------------------------------------------
 # Text overlay
@@ -316,21 +589,26 @@ def edit_photo(
     text=None,
     text_style="minimal",
     text_position="bottom",
+    return_report=False,
 ):
-    """Return a finished JPEG as BytesIO.
+    """Return a finished JPEG as BytesIO (or (BytesIO, report) if return_report).
 
-    style:         natural | baddie | soft | moody
+    style:         natural | baddie | soft | moody | golden | clean | film
     size:          post (4:5) | story (9:16) | square | original
     text:          optional overlay line (emoji are stripped)
     text_style:    minimal | bold | serif
     text_position: bottom | center | top
+    report:        what the auto-fix did (crop source, exposure, noise ...)
     """
+    report = {"style": style if style in STYLES else "natural"}
     img = _load(image_bytes)
 
     if size in SIZES:
-        img = _smart_crop(img, SIZES[size])
+        img = _smart_crop(img, SIZES[size], report)
+    else:
+        report["crop"] = "none"
 
-    img = _apply_style(img, style)
+    img = _apply_style(img, style, report)
 
     if text:
         img = _add_text(
@@ -340,4 +618,4 @@ def edit_photo(
     out = io.BytesIO()
     img.save(out, format="JPEG", quality=95, subsampling=0, optimize=True)
     out.seek(0)
-    return out
+    return (out, report) if return_report else out
