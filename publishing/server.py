@@ -10,6 +10,7 @@ so nobody can enumerate your photo library.
 """
 import html
 import logging
+from pathlib import Path
 import threading
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -88,6 +89,14 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
             url = urlparse(self.path)
             if url.path == "/healthz":
                 return self._send(200, "ok", "text/plain")
+            if url.path in ("/privacy-policy", "/privacy-policy/"):
+                # Serve the repository-root policy page on the same Render domain.
+                policy_path = Path(__file__).resolve().parent.parent / "privacy-policy.html"
+                try:
+                    policy_html = policy_path.read_text(encoding="utf-8")
+                except OSError:
+                    return self._send(404, "Privacy policy not found", "text/plain")
+                return self._send(200, policy_html, "text/html; charset=utf-8")
             if web_login is not None and url.path == "/login":
                 status, body, headers = web_login.login()
                 return self._send(status, body, extra=headers)
