@@ -22,6 +22,11 @@ OPENROUTER_MODEL = _env("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 TREND_SMART = True
 TREND_ALLOW_SOLEMN = True   # condolence Stories for confirmed losses (>=3 publishers)
 
+# Extra trend sources (all optional; empty = that source is skipped)
+GNEWS_API_KEY = _env("GNEWS_API_KEY")
+REDDIT_CLIENT_ID = _env("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = _env("REDDIT_CLIENT_SECRET")
+
 # ---------------- Instagram publishing ----------------
 META_APP_ID = _env("META_APP_ID")
 META_APP_SECRET = _env("META_APP_SECRET")
