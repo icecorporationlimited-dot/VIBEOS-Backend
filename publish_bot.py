@@ -2,7 +2,7 @@
 publish_bot.py — Telegram commands for Phase 2 (Instagram publishing).
 
   /connect     link an Instagram professional account (official OAuth)
-  /post        publish a ready photo as Post / Story, or a Carousel
+  /post <id>   publish ONE specific photo now, as Post or Story
   /igstatus    account, token expiry and recent publish jobs
   /disconnect  forget the stored Instagram token
 
@@ -222,6 +222,10 @@ def register(app, rt, content_buffer):
         await update.message.reply_text("\n".join(lines))
 
     async def post(update, context):
+        """/post <id>: publish ONE specific photo now (Post or Story only).
+
+        <id> is a job id from /queue, or the start of a ready photo's id.
+        """
         if rt is None:
             return await _disabled(update)
         uid = update.effective_user.id
@@ -229,22 +233,52 @@ def register(app, rt, content_buffer):
         if not acct or acct.get("status") != "active":
             return await update.message.reply_text(
                 "Connect (or reconnect) Instagram first: /connect")
-        ready = await asyncio.to_thread(content_buffer.list_photo_ready, uid)
-        if not ready:
+        arg = (context.args[0] if context.args else "").strip().lower()
+        if not arg:
             return await update.message.reply_text(
-                "📭 Nothing publish-ready. Send photos and tap Approve first.")
-        latest = ready[-1]
-        buttons = [[InlineKeyboardButton("📸 Post", callback_data=f"ig:p:{latest['_id']}"),
-                    InlineKeyboardButton("📱 Story", callback_data=f"ig:s:{latest['_id']}")]]
-        if len(ready) >= 2:
-            n = min(len(ready), 10)
-            buttons.append([InlineKeyboardButton(
-                f"🎠 Carousel (latest {n})", callback_data=f"ig:c:{n}")])
-        buttons.append([InlineKeyboardButton("Cancel", callback_data="ig:x")])
-        data = await asyncio.to_thread(content_buffer.get_media, latest["_id"], "post")
-        cap = (latest["creative"].get("caption") or "")[:300]
+                "Which photo? Use /post <id> with an id from /queue, "
+                "e.g. /post ac5021")
+
+        asset_id = None
+        jobs = await asyncio.to_thread(rt.service.find_by_prefix, uid, arg)
+        jobs = [j for j in jobs if j["status"] in ("queued", "retry", "held",
+                                                   "needs_reauth", "published")]
+        if len(jobs) > 1:
+            return await update.message.reply_text(
+                "That id matches several jobs, use more characters.")
+        if jobs:
+            job = jobs[0]
+            if job["format"] not in ("photo", "story") or len(job["asset_ids"]) != 1:
+                return await update.message.reply_text(
+                    f"Job {job['_id'][:6]} is a {job['format']}, /post only handles "
+                    "single photos.")
+            if job["status"] == "published":
+                return await update.message.reply_text(
+                    f"Job {job['_id'][:6]} is already published.")
+            asset_id = job["asset_ids"][0]
+        else:
+            ready = await asyncio.to_thread(content_buffer.list_photo_ready, uid)
+            found = [a for a in ready if str(a["_id"]).lower().startswith(arg)]
+            if len(found) > 1:
+                return await update.message.reply_text(
+                    "That id matches several photos, use more characters.")
+            if found:
+                asset_id = found[0]["_id"]
+        if asset_id is None:
+            return await update.message.reply_text(
+                "No queued job or ready photo with that id. Check /queue.")
+
+        buttons = [[InlineKeyboardButton("📸 Post", callback_data=f"ig:p:{asset_id}"),
+                    InlineKeyboardButton("📱 Story", callback_data=f"ig:s:{asset_id}")],
+                   [InlineKeyboardButton("Cancel", callback_data="ig:x")]]
+        try:
+            data = await asyncio.to_thread(content_buffer.get_media, asset_id, "post")
+            asset = await asyncio.to_thread(content_buffer.assets.find_one, {"_id": asset_id})
+        except KeyError:
+            return await update.message.reply_text("That photo no longer exists.")
+        cap = ((asset or {}).get("creative", {}).get("caption") or "")[:300]
         await update.message.reply_photo(
-            photo=data, caption=f"Publish to @{acct['username']}?\n\n{cap}",
+            photo=data, caption=f"Publish this photo to @{acct['username']} now?\n\n{cap}",
             reply_markup=InlineKeyboardMarkup(buttons))
 
     async def _run_and_report(query, uid, job):
@@ -293,13 +327,7 @@ def register(app, rt, content_buffer):
                 job = {"_id": arg}
             elif action in ("p", "s"):
                 fmt = "photo" if action == "p" else "story"
-                job = await asyncio.to_thread(rt.service.enqueue, uid, [arg], fmt,
-                                              None, "manual", True)
-            elif action == "c":
-                ready = await asyncio.to_thread(content_buffer.list_photo_ready, uid)
-                ids = [a["_id"] for a in ready[-int(arg):]]
-                job = await asyncio.to_thread(rt.service.enqueue, uid, ids, "carousel",
-                                              None, "manual", True)
+                job = await asyncio.to_thread(rt.service.publish_now, uid, arg, fmt)
             else:
                 return
         except (PublishError, NotConnected) as exc:
@@ -349,7 +377,7 @@ def register(app, rt, content_buffer):
                 line += f"\n   {str(extra)[:90]}"
             lines.append(line)
         await update.message.reply_text(head + "\n".join(lines) +
-                                        "\n\n/cancel <id> · /release <id>")
+                                        "\n\n/post <id> (publish now) · /cancel <id> · /release <id>")
 
     async def _one_job(update, context):
         uid = update.effective_user.id
