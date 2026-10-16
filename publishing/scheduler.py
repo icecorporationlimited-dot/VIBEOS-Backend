@@ -410,7 +410,9 @@ class Worker:
             except Exception:
                 logger.exception("Content planning failed for %s; using normal slot",
                                  route["asset_ids"][0])
-        if slot is None:
+        # A dated poster must not silently drift to a random day if its printed
+        # date has passed or that day's calendar is full.
+        if slot is None and meta.get("event_status") not in ("printed_date_passed", "date_full"):
             slot = self.calendar.next_slot(tg)
         return slot, meta
 
@@ -450,6 +452,10 @@ class Worker:
                         continue
                 slot, meta = self._slot_for(tg, route)
                 if slot is None:
+                    if meta.get("event_status") in ("printed_date_passed", "date_full"):
+                        logger.info("Skipping dated content %s: %s",
+                                    route["asset_ids"][0], meta.get("event_status"))
+                        continue
                     break
                 self._store_route(route)   # before enqueue: format stays stable after a crash
                 try:
@@ -462,7 +468,7 @@ class Worker:
                     continue
                 room -= 1
                 extra = {"route": route.get("decision") or {}}
-                if meta.get("event_status") == "reserved":
+                if meta.get("event_status") in ("reserved", "date_pinned"):
                     extra.update({"planning": meta, "event_key": meta.get("event"),
                                   "event_date": meta.get("event_date")})
                 self.service.jobs.update_one({"_id": job["_id"]}, {"$set": extra})
