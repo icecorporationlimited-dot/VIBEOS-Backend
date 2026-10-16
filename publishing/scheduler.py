@@ -241,11 +241,20 @@ class Worker:
             except Exception:
                 logger.exception("Could not load Instagram media for engagement user %s", tg)
                 continue
+            replies_sent = 0
+            starter_sent = False
+            recent_cutoff = self.clock() - timedelta(hours=24)
+            try:
+                replies_today = self.engagement_events.count_documents({
+                    "telegram_id": str(tg), "kind": "comment_reply",
+                    "created_at": {"$gte": recent_cutoff}})
+            except Exception:
+                replies_today = 0
             for post in media:
                 media_id = str(post.get("id") or "")
                 if not media_id:
                     continue
-                if settings.get("auto_comments"):
+                if settings.get("auto_comments") and not starter_sent:
                     comment_key = "starter:" + media_id
                     # Only add a starter comment to a post published in the last 45 minutes.
                     try:
@@ -263,6 +272,7 @@ class Worker:
                                 post_context=caption, tone="natural", username=username, max_chars=220)
                             result = self.accounts.graph.create_comment(media_id, text, token)
                             self._engagement_mark(tg, comment_key, "starter_comment", str(result.get("id") or ""))
+                            starter_sent = True
                         except Exception:
                             logger.exception("AI starter comment failed for media %s", media_id)
                 if not settings.get("auto_replies"):
@@ -273,6 +283,8 @@ class Worker:
                     logger.exception("Could not list comments for media %s", media_id)
                     continue
                 for comment in comments:
+                    if replies_sent >= 3 or replies_today >= 10:
+                        break
                     cid = str(comment.get("id") or "")
                     text_in = str(comment.get("text") or "").strip()
                     commenter = str(comment.get("username") or "").lstrip("@").lower()
@@ -296,6 +308,8 @@ class Worker:
                             tone="friendly", username=username, max_chars=500)
                         result = self.accounts.graph.reply_to_comment(cid, reply, token)
                         self._engagement_mark(tg, key, "comment_reply", str(result.get("id") or ""))
+                        replies_sent += 1
+                        replies_today += 1
                     except Exception:
                         logger.exception("AI reply failed for comment %s", cid)
 
