@@ -1,0 +1,14 @@
+python-telegram-bot
+pymongo
+Pillow
+numpy
+groq
+dnspython
+tzdata
+requests
+cryptography
+PyJWT[crypto]>=2.8,<3
+fastapi
+uvicorn
+httpx
+python-multipart

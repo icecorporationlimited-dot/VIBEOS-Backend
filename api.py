@@ -1,0 +1,213 @@
+"""api.py — web API for the VibeOS web app (Netlify) + reverse proxy to the bot's own server.
+
+Runs in the same Render service as the Telegram bot (see main.py):
+
+  public PORT  ->  this FastAPI app
+      /api/...     web app endpoints (need X-API-Key header)
+      everything   forwarded untouched to the bot's built-in server
+      else         (/healthz, /oauth/callback, /media/..., /login, /privacy-policy)
+
+So existing Instagram login / media / health-check URLs keep working.
+
+Env vars:
+  WEB_API_KEY       secret the web app sends in X-API-Key (API is disabled if unset)
+  WEB_ORIGINS       comma-separated allowed origins, e.g. https://vibeos.netlify.app
+  INTERNAL_PORT     port of the bot's internal server (set by main.py)
+"""
+import asyncio
+import base64
+import hmac
+import io
+import json
+import logging
+import os
+import re
+
+import httpx
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+
+import copywriter
+import settings
+from editor import SIZES, STYLES, edit_photo
+
+logger = logging.getLogger("vibeos.api")
+
+WEB_API_KEY = os.environ.get("WEB_API_KEY", "")
+ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("WEB_ORIGINS", "").split(",") if o.strip()]
+INTERNAL_PORT = int(os.environ.get("INTERNAL_PORT", "10001"))
+MAX_UPLOAD = 12 * 1024 * 1024  # 12 MB
+TEXT_STYLES = ["minimal", "bold", "serif"]
+TEXT_POSITIONS = ["bottom", "center", "top"]
+
+app = FastAPI(title="VibeOS API", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ORIGINS,          # empty list = no browser origin allowed
+    allow_methods=["GET", "POST"],
+    allow_headers=["X-API-Key", "Content-Type"],
+    expose_headers=["X-Edit-Report"],
+)
+
+_groq = None
+
+
+def _groq_client():
+    global _groq
+    if _groq is None:
+        from groq import Groq
+        _groq = Groq(api_key=settings.GROQ_API_KEY)
+    return _groq
+
+
+def _check_key(key: str | None):
+    if not WEB_API_KEY:
+        raise HTTPException(503, "Web API is not configured (WEB_API_KEY missing).")
+    if not key or not hmac.compare_digest(key.encode(), WEB_API_KEY.encode()):
+        raise HTTPException(401, "Invalid API key.")
+
+
+async def _read_image(file: UploadFile) -> bytes:
+    data = await file.read(MAX_UPLOAD + 1)
+    if not data:
+        raise HTTPException(400, "Empty file.")
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "Image too large (max 12 MB).")
+    return data
+
+
+def _parse_ai_json(text):
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError("No JSON object found in AI response")
+    return json.loads(text[start:end + 1])
+
+
+def _clean_overlay(value):
+    text = re.sub(r"\s+", " ", str(value or "")).strip().strip("\"'")
+    text = "".join(ch for ch in text if ord(ch) < 0x2070)
+    return " ".join(text.split()[:7])[:60]
+
+
+# ----------------------------------------------------------------- endpoints
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+@app.get("/api/options")
+def options(x_api_key: str | None = Header(default=None)):
+    _check_key(x_api_key)
+    return {
+        "styles": list(STYLES),
+        "sizes": list(SIZES) + ["original"],
+        "text_styles": TEXT_STYLES,
+        "text_positions": TEXT_POSITIONS,
+        "caption_styles": list(copywriter.CAPTION_STYLES),
+        "languages": list(copywriter.LANGUAGES),
+    }
+
+
+@app.post("/api/edit")
+async def api_edit(
+    file: UploadFile = File(...),
+    style: str = Form("natural"),
+    size: str = Form("post"),
+    text: str = Form(""),
+    text_style: str = Form("minimal"),
+    text_position: str = Form("bottom"),
+    x_api_key: str | None = Header(default=None),
+):
+    _check_key(x_api_key)
+    if style not in STYLES:
+        raise HTTPException(400, f"style must be one of {list(STYLES)}")
+    if size not in list(SIZES) + ["original"]:
+        raise HTTPException(400, "invalid size")
+    if text_style not in TEXT_STYLES or text_position not in TEXT_POSITIONS:
+        raise HTTPException(400, "invalid text_style or text_position")
+    data = await _read_image(file)
+    try:
+        out, report = await asyncio.to_thread(
+            edit_photo, data, style, size, text.strip()[:80] or None,
+            text_style, text_position, True,
+        )
+    except Exception:
+        logger.exception("edit failed")
+        raise HTTPException(422, "Could not process this image.")
+    short = json.dumps({k: str(v)[:60] for k, v in (report or {}).items()})
+    return Response(
+        out.getvalue(), media_type="image/jpeg",
+        headers={"X-Edit-Report": short, "Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/caption")
+async def api_caption(
+    file: UploadFile = File(...),
+    vibe: str = Form("natural"),
+    mode: str = Form("natural"),
+    language: str = Form("english"),
+    x_api_key: str | None = Header(default=None),
+):
+    _check_key(x_api_key)
+    if mode not in copywriter.CAPTION_STYLES:
+        raise HTTPException(400, f"mode must be one of {list(copywriter.CAPTION_STYLES)}")
+    if vibe not in STYLES:
+        vibe = "natural"
+    if language not in copywriter.LANGUAGES:
+        language = "english"
+    data = await _read_image(file)
+
+    prompt = copywriter.build_prompt(mode=mode, vibe=vibe, language=language)
+    image_url = "data:image/jpeg;base64," + base64.b64encode(data).decode()
+    last_error = None
+    for attempt in range(2):
+        try:
+            resp = await asyncio.to_thread(
+                _groq_client().chat.completions.create,
+                model=settings.VISION_MODEL,
+                messages=[{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ]}],
+                temperature=0.9 if attempt == 0 else 0.6,
+            )
+            raw = _parse_ai_json(resp.choices[0].message.content)
+            parsed = copywriter.parse_copy(raw, mode=mode)
+            parsed["overlay"] = _clean_overlay(raw.get("overlay", ""))
+            return JSONResponse(parsed)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("caption attempt %s failed: %s", attempt + 1, exc)
+    logger.error("caption failed: %s", last_error)
+    raise HTTPException(502, "AI caption failed. Try again.")
+
+
+# ------------------------------------------------- proxy to the bot's server
+_HOP = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade",
+        "proxy-authorization", "proxy-authenticate", "trailers", "content-length",
+        "content-encoding"}
+_client = httpx.AsyncClient(
+    base_url=f"http://127.0.0.1:{INTERNAL_PORT}", follow_redirects=False, timeout=30
+)
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "HEAD"])
+async def proxy(path: str, request: Request):
+    if path.startswith("api/"):
+        raise HTTPException(404, "Not found")
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
+    try:
+        upstream = await _client.request(
+            request.method, "/" + path, params=request.query_params,
+            headers=headers, content=await request.body(),
+        )
+    except httpx.HTTPError:
+        return Response("bot server unavailable", status_code=502, media_type="text/plain")
+    resp = Response(upstream.content, status_code=upstream.status_code)
+    for k, v in upstream.headers.multi_items():
+        if k.lower() not in _HOP:
+            resp.raw_headers.append((k.lower().encode(), v.encode()))
+    return resp
