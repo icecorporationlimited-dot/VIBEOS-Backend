@@ -43,7 +43,8 @@ class Worker:
     def __init__(self, service, accounts, autopilot, calendar, buffer, notify, *,
                  interval=10.0, autofill_every=60.0, token_check_every=1800.0,
                  batch=5, refresh_days=10, clock=_now, planner=None,
-                 reel_audio_dir=None, trend_cfg=None, trend_every=1800.0):
+                 reel_audio_dir=None, trend_cfg=None, trend_every=1800.0,
+                 engagement_ai=None, engagement_events=None, engagement_every=300.0):
         self.service, self.accounts, self.autopilot = service, accounts, autopilot
         self.calendar, self.buffer, self.notify = calendar, buffer, notify
         self.planner = planner
@@ -51,6 +52,13 @@ class Worker:
         self._reel_blocked = {}                # telegram_id -> retry-after time after a failed render
         self.interval, self.batch, self.refresh_days = interval, batch, refresh_days
         self.trend_cfg = trend_cfg             # trends.auto_story.TrendStoryConfig or None
+        self.engagement_ai = engagement_ai
+        self.engagement_events = engagement_events
+        if self.engagement_events is not None:
+            self.engagement_events.create_index(
+                [("telegram_id", 1), ("event_key", 1)], unique=True)
+        self._engagement_last = None
+        self.engagement_every = engagement_every
         self.every = {"autofill": autofill_every, "tokens": token_check_every,
                       "trends": trend_every}
         self.clock = clock
@@ -102,6 +110,8 @@ class Worker:
             self._guard(self._autofill)
         if self.trend_cfg is not None and self._due("trends"):
             self._guard(self._trend_stories)
+        if self.engagement_ai is not None and self._engagement_due():
+            self._guard(self._engagement)
         if self._due("tokens"):
             self._guard(self._check_tokens)
         return ran
@@ -187,6 +197,107 @@ class Worker:
                 self._send(tg, f"📰 Trend Story queued: “{done['title']}” ({done['category']}, "
                                f"via {src}). It posts within {cfg.max_age_hours:g}h or is dropped. "
                                "/queue to see it, /cancel to stop it.")
+
+    # ---- AI comment engagement -------------------------------------------
+    def _engagement_due(self):
+        now = self.clock()
+        if self._engagement_last is None or (now - self._engagement_last).total_seconds() >= self.engagement_every:
+            self._engagement_last = now
+            return True
+        return False
+
+    def _engagement_seen(self, tg, key):
+        return bool(self.engagement_events and self.engagement_events.find_one({
+            "telegram_id": str(tg), "event_key": key}))
+
+    def _engagement_mark(self, tg, key, kind, result_id=""):
+        if self.engagement_events is None:
+            return
+        try:
+            self.engagement_events.update_one(
+                {"telegram_id": str(tg), "event_key": key},
+                {"$setOnInsert": {"telegram_id": str(tg), "event_key": key,
+                                  "kind": kind, "result_id": result_id,
+                                  "created_at": self.clock()}}, upsert=True)
+        except Exception:
+            logger.exception("Could not store engagement idempotency marker")
+
+    def _engagement(self):
+        """Reply to recent comments on the user's own posts; never comment on strangers' posts."""
+        if self.engagement_events is None:
+            return
+        from datetime import datetime
+        for tg in self.autopilot.enabled_users():
+            settings = self.autopilot.get(tg)
+            if settings.get("paused") or not (settings.get("auto_replies") or settings.get("auto_comments")):
+                continue
+            acct = self.accounts.get(tg)
+            if not acct or acct.get("status") != "active":
+                continue
+            try:
+                ig_id, token = self.accounts.get_token(tg)
+                username = str(acct.get("username") or "").lstrip("@").lower()
+                media = self.accounts.graph.list_media(ig_id, token, limit=10)
+            except Exception:
+                logger.exception("Could not load Instagram media for engagement user %s", tg)
+                continue
+            for post in media:
+                media_id = str(post.get("id") or "")
+                if not media_id:
+                    continue
+                if settings.get("auto_comments"):
+                    comment_key = "starter:" + media_id
+                    # Only add a starter comment to a post published in the last 45 minutes.
+                    try:
+                        stamp = datetime.fromisoformat(str(post.get("timestamp", "")).replace("Z", "+00:00"))
+                        if stamp.tzinfo is None:
+                            stamp = stamp.replace(tzinfo=timezone.utc)
+                        recent = (self.clock() - stamp).total_seconds() <= 2700
+                    except (ValueError, TypeError):
+                        recent = False
+                    if recent and not self._engagement_seen(tg, comment_key):
+                        try:
+                            caption = str(post.get("caption") or "")[:1000]
+                            text = self.engagement_ai.generate_reply(
+                                incoming_text="Write a friendly first comment for this post.",
+                                post_context=caption, tone="natural", username=username, max_chars=220)
+                            result = self.accounts.graph.create_comment(media_id, text, token)
+                            self._engagement_mark(tg, comment_key, "starter_comment", str(result.get("id") or ""))
+                        except Exception:
+                            logger.exception("AI starter comment failed for media %s", media_id)
+                if not settings.get("auto_replies"):
+                    continue
+                try:
+                    comments = self.accounts.graph.list_comments(media_id, token, limit=50)
+                except Exception:
+                    logger.exception("Could not list comments for media %s", media_id)
+                    continue
+                for comment in comments:
+                    cid = str(comment.get("id") or "")
+                    text_in = str(comment.get("text") or "").strip()
+                    commenter = str(comment.get("username") or "").lstrip("@").lower()
+                    if not cid or not text_in or (username and commenter == username):
+                        continue
+                    key = "reply:" + cid
+                    if self._engagement_seen(tg, key):
+                        continue
+                    # Only automatically respond to comments from the last 24 hours.
+                    try:
+                        stamp = datetime.fromisoformat(str(comment.get("timestamp", "")).replace("Z", "+00:00"))
+                        if stamp.tzinfo is None:
+                            stamp = stamp.replace(tzinfo=timezone.utc)
+                        if (self.clock() - stamp).total_seconds() > 86400:
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                    try:
+                        reply = self.engagement_ai.generate_reply(
+                            incoming_text=text_in, post_context=str(post.get("caption") or "")[:1000],
+                            tone="friendly", username=username, max_chars=500)
+                        result = self.accounts.graph.reply_to_comment(cid, reply, token)
+                        self._engagement_mark(tg, key, "comment_reply", str(result.get("id") or ""))
+                    except Exception:
+                        logger.exception("AI reply failed for comment %s", cid)
 
     # ---- autofill --------------------------------------------------------
     def _detections(self, tg, assets):
