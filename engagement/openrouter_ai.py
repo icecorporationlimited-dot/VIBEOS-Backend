@@ -95,5 +95,5 @@ class OpenRouterAI:
     def _clean(value, limit):
         # Strip control characters and keep prompts bounded.
         text = str(value or "")
-        text = "".join(ch for ch in text if ch in "\\n\\t" or ord(ch) >= 32)
+        text = "".join(ch for ch in text if ch in "\n\t" or ord(ch) >= 32)
         return text.strip()[:limit]
