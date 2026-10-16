@@ -432,7 +432,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🔥 VibeOS is ready!\n\n"
         "📸 Send a photo for AI editing.\n"
-        "📸 Send an album to select the best photo.\n\n"
+        "📸 Send an album to select the best photo.\n"
+        "🗂️ /photos — view your saved photo IDs\n"
+        "🗑️ /deletephoto ID — delete one photo\n"
+        "⚠️ /deleteallphotos confirm — delete all your photo data\n\n"
         "🎨 /vibe baddie | soft | moody | natural\n\n"
         "✍️ /caption baddie\n"
         "✍️ /caption soft\n"
@@ -2068,6 +2071,158 @@ async def gridreset_command(update, context):
 
 
 # =========================================================
+# PHOTO LIBRARY + PERMANENT DELETE
+# =========================================================
+
+async def photos_command(update, context):
+    """List this user's saved photo IDs, statuses and buffer assets."""
+    uid = str(update.effective_user.id)
+    legacy = list(photos.find({"telegram_id": uid}).sort("created_at", pymongo.DESCENDING).limit(15))
+    assets = content_buffer.list_assets(uid)
+    assets.sort(key=lambda a: a.get("created_at") or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True)
+    lines = ["🗂 YOUR VIBEOS PHOTOS", "Use /deletephoto <ID> to permanently delete one."]
+    seen = set()
+    for doc in legacy:
+        asset_id = str(doc.get("asset_id") or "")
+        photo_id = asset_id or str(doc.get("_id", ""))
+        if not photo_id or photo_id in seen:
+            continue
+        seen.add(photo_id)
+        lines.append(f"• {photo_id} — {doc.get('status', 'saved')} (photo)")
+    for asset in assets:
+        asset_id = str(asset.get("_id", ""))
+        if not asset_id or asset_id in seen:
+            continue
+        seen.add(asset_id)
+        analysis = asset.get("analysis") or {}
+        score = analysis.get("quality_score")
+        score_text = f", score {score}" if score is not None else ""
+        lines.append(f"• {asset_id} — {asset.get('status', 'saved')}{score_text} (buffer)")
+    if not seen:
+        await update.message.reply_text("📭 You have no saved photos.")
+        return
+    lines.append("\nDelete everything: /deleteallphotos confirm")
+    await update.message.reply_text("\n".join(lines[:35]))
+
+
+def _delete_jobs_for_assets(uid, asset_ids):
+    """Cancel queued work before deleting its source media; never delete mid-publish."""
+    asset_ids = [str(a) for a in asset_ids if a]
+    if not asset_ids:
+        return True, 0
+    jobs = db["publish_jobs"]
+    owned = {"telegram_id": str(uid), "asset_ids": {"$in": asset_ids}}
+    if jobs.find_one({**owned, "status": "running"}):
+        return False, 0
+    result = jobs.update_many(
+        {**owned, "status": {"$in": ["queued", "retry", "held", "needs_reauth", "needs_attention"]}},
+        {"$set": {
+            "status": "cancelled",
+            "updated_at": now_utc(),
+            "last_error": "Cancelled because the source photo was deleted by its owner.",
+        }},
+    )
+    return True, int(getattr(result, "modified_count", 0))
+
+
+async def deletephoto_command(update, context):
+    """Permanently remove one owned legacy photo and/or content-buffer asset."""
+    uid = str(update.effective_user.id)
+    if len(context.args) != 1:
+        await update.message.reply_text(
+            "Usage: /deletephoto <ID>\nUse /photos to see your photo IDs."
+        )
+        return
+    photo_id = context.args[0].strip()
+    asset = content_buffer.assets.find_one({"_id": photo_id, "telegram_id": uid})
+    query = {"telegram_id": uid}
+    if ObjectId.is_valid(photo_id):
+        query["_id"] = ObjectId(photo_id)
+        legacy = photos.find_one(query)
+    else:
+        query["_id"] = photo_id
+        legacy = photos.find_one(query)
+    related_legacy = list(photos.find({"telegram_id": uid, "asset_id": photo_id}))
+    if not asset and not legacy and not related_legacy:
+        await update.message.reply_text(
+            "❌ Photo ID not found in your account. Use /photos to see your IDs."
+        )
+        return
+
+    asset_ids = []
+    if asset:
+        asset_ids.append(str(asset["_id"]))
+    for doc in ([legacy] if legacy else []) + related_legacy:
+        if doc.get("asset_id"):
+            asset_ids.append(str(doc["asset_id"]))
+    safe, cancelled = _delete_jobs_for_assets(uid, asset_ids)
+    if not safe:
+        await update.message.reply_text(
+            "⏳ This photo is part of a post currently publishing. Wait until it finishes, then delete it."
+        )
+        return
+
+    deleted_assets = 0
+    for asset_id in set(asset_ids):
+        if content_buffer.delete_asset(uid, asset_id):
+            deleted_assets += 1
+    legacy_ids = {str(doc["_id"]) for doc in ([legacy] if legacy else []) + related_legacy}
+    if legacy:
+        photos.delete_one({"_id": legacy["_id"], "telegram_id": uid})
+    if related_legacy:
+        photos.delete_many({"telegram_id": uid, "asset_id": photo_id})
+    grid_ids = legacy_ids | {photo_id} | set(asset_ids)
+    grid_entries.delete_many({"telegram_id": uid, "photo_id": {"$in": list(grid_ids)}})
+
+    await update.message.reply_text(
+        "🗑️ Photo permanently deleted from your VIBEOS database.\n"
+        f"• Buffer assets removed: {deleted_assets}\n"
+        f"• Pending publish jobs cancelled: {cancelled}\n"
+        "This does not delete a post that was already published on Instagram."
+    )
+
+
+async def deleteallphotos_command(update, context):
+    """Delete all of the caller's photo records, assets, and grid entries."""
+    uid = str(update.effective_user.id)
+    if not context.args or context.args[0].lower() != "confirm":
+        await update.message.reply_text(
+            "⚠️ This permanently deletes ALL your saved VIBEOS photo records, "
+            "buffer images and grid entries.\n\n"
+            "To confirm, send exactly:\n/deleteallphotos confirm"
+        )
+        return
+
+    asset_docs = content_buffer.list_assets(uid)
+    asset_ids = [str(a["_id"]) for a in asset_docs]
+    safe, cancelled = _delete_jobs_for_assets(uid, asset_ids)
+    if not safe:
+        await update.message.reply_text(
+            "⏳ A photo is part of a post currently publishing. Nothing was deleted. "
+            "Wait for it to finish, then run /deleteallphotos confirm again."
+        )
+        return
+
+    deleted_assets = await asyncio.to_thread(content_buffer.delete_all_assets, uid)
+    legacy_count = photos.count_documents({"telegram_id": uid})
+    photos.delete_many({"telegram_id": uid})
+    grid_count = grid_entries.count_documents({"telegram_id": uid})
+    grid_entries.delete_many({"telegram_id": uid})
+    # Batch documents are metadata only; delete only this user's batches.
+    batches.delete_many({"telegram_id": uid})
+
+    await update.message.reply_text(
+        "🗑️ ALL YOUR VIBEOS PHOTO DATA HAS BEEN DELETED.\n"
+        f"• Buffer assets and stored image variants: {deleted_assets}\n"
+        f"• Legacy photo records: {legacy_count}\n"
+        f"• Grid entries: {grid_count}\n"
+        f"• Pending publish jobs cancelled: {cancelled}\n\n"
+        "Other users' data is untouched. Already-published Instagram posts are not removed."
+    )
+
+
+# =========================================================
 # ERROR HANDLER
 # =========================================================
 
@@ -2157,6 +2312,9 @@ def main():
         CommandHandler("trendcaption", trendcaption_command)
     )
 
+    app.add_handler(CommandHandler("photos", photos_command))
+    app.add_handler(CommandHandler("deletephoto", deletephoto_command))
+    app.add_handler(CommandHandler("deleteallphotos", deleteallphotos_command))
     app.add_handler(CommandHandler("buffer", buffer_command))
     app.add_handler(CommandHandler("ready", ready_command))
     app.add_handler(CommandHandler("grid", grid_command))
