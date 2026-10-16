@@ -121,10 +121,16 @@ def build_runtime(db, content_buffer, bot_token):
         fetch=partial(fetch_google_trends, region, None, 20), classifier=classifier,
         brand=getattr(app_settings, "TREND_BRAND", "VIBEOS"),
         show_headline=getattr(app_settings, "TREND_SHOW_HEADLINE", True))
+    from engagement.openrouter_ai import OpenRouterAI
+    engagement_ai = OpenRouterAI(
+        getattr(app_settings, "OPENROUTER_API_KEY", ""),
+        getattr(app_settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    engagement_events = db["engagement_events"]
     worker = Worker(service, accounts, autopilot, calendar, content_buffer,
                     notify=lambda tg, text: send_telegram(bot_token, tg, text),
                     refresh_days=cfg.refresh_before_days, planner=planner,
-                    trend_cfg=trend_cfg)
+                    trend_cfg=trend_cfg, engagement_ai=engagement_ai,
+                    engagement_events=engagement_events)
 
     web_login = None
     web_auth_cfg = load_web_auth_settings()
