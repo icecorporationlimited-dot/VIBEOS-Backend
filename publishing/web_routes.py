@@ -26,11 +26,11 @@ def _cookie_value(header, name):
 def _csrf_cookie(token, max_age=8 * 60 * 60):
     if not token or any(c in token for c in "\r\n;"):
         raise ValueError("Invalid CSRF token.")
-    return f"{CSRF_COOKIE}={token}; Path=/; Secure; SameSite=Strict; Max-Age={max_age}"
+    return f"{CSRF_COOKIE}={token}; Path=/; Secure; SameSite=Lax; Max-Age={max_age}"
 
 
 def _clear_csrf_cookie():
-    return f"{CSRF_COOKIE}=; Path=/; Secure; SameSite=Strict; Max-Age=0"
+    return f"{CSRF_COOKIE}=; Path=/; Secure; SameSite=Lax; Max-Age=0"
 
 
 def _clear_state_cookie():
