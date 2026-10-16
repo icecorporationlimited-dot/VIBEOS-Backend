@@ -20,6 +20,10 @@ MAX_TTL_SECONDS = 60 * 60 * 24
 def _now():
     return datetime.now(timezone.utc)
 
+def _aware(dt):
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 def _digest(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -96,7 +100,7 @@ class WebSessionStore:
         if not session:
             return None
         now = self.clock()
-        expires = session.get("expires_at")
+        expires = _aware(session.get("expires_at"))
         if not expires or expires <= now:
             self.sessions.delete_one({"token_hash": _digest(token)})
             return None
@@ -118,7 +122,7 @@ class WebSessionStore:
                 not isinstance(csrf_token, str) or not csrf_token):
             return False
         session = self.sessions.find_one({"token_hash": _digest(token)})
-        if not session or session.get("expires_at") <= self.clock():
+        if not session or _aware(session.get("expires_at")) <= self.clock():
             return False
         user = self.users.find_one({
             "_id": session.get("user_id"),
