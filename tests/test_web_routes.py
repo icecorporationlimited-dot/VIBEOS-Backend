@@ -67,7 +67,7 @@ class WebLoginRouteTests(unittest.TestCase):
             OIDC_STATE_COOKIE + "=" + self.oidc.state,
         )
         self.assertEqual(status, 303)
-        self.assertEqual(headers["Location"], "/web")
+        self.assertEqual(headers["Location"], "/app/")
         self.assertIn("Secure", headers["Set-Cookie"])
         self.assertIn("HttpOnly", headers["Set-Cookie"])
         self.assertIn(CSRF_COOKIE, headers["Set-Cookie-2"])

@@ -33,6 +33,7 @@ DEFAULTS = {
     "blocked_topics": [],
     "min_gap_minutes": 60,
     "slots": ["12:30", "19:30"],
+    "timezone": "",              # IANA name; "" = use the owner's default (web users set it)
 }
 _SLOT = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
@@ -76,6 +77,16 @@ def _clean(field, value):
         if len(topics) > 50:
             raise ValueError("At most 50 blocked topics.")
         return topics
+    if field == "timezone":
+        name = str(value or "").strip()
+        if not name:
+            return ""
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(name)
+        except Exception:
+            raise ValueError("Unknown timezone.") from None
+        return name
     if field == "slots":
         out = []
         for t in value:
@@ -133,6 +144,14 @@ class AutopilotStore:
                  "$setOnInsert": insert_values},
                 upsert=True)
         return self.get(principal)
+
+    def set_web_autopilot(self, principal, on: bool) -> dict:
+        """Browser switch: ON = autofill + full auto (photos in, posts out)."""
+        if not isinstance(principal, Principal) or principal.kind != "web":
+            raise ValueError("A verified web principal is required.")
+        if on:
+            return self.update(principal, enabled=True, full_auto=True, paused=False)
+        return self.update(principal, enabled=False, full_auto=False)
 
     def set_paused(self, telegram_id, paused: bool) -> dict:
         return self.update(telegram_id, paused=paused)

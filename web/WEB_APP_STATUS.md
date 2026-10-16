@@ -1,13 +1,9 @@
-# VIBEOS Creator Studio — Netlify frontend
+# Web app status
 
-The static frontend runs on Netlify without `run_webapp.py`. Media, queue drafts, activity notifications, and settings are stored in the current browser using IndexedDB. They persist across refreshes in that browser, but are not shared with other devices or the Render backend.
+Served by the backend at `/app` (same origin as `/login` and `/web/*`).
 
-## Functional in browser workspace
-- Upload image files, preview, and delete them.
-- Create/edit/remove Story, Post, and Reel queue plans, with optional scheduled time.
-- View and clear activity notifications.
-- Save Autopilot, Auto Story, and Auto Captions preferences.
-- Open the existing hosted Instagram login URL.
-
-## Not yet live publishing
-Queue entries are drafts/plans only. Browser preferences do not activate Render automation. Publishing to Instagram and server-side notifications require authenticated backend endpoints, persistent hosted media storage, and integration with the publishing worker/Meta permissions. Do not display a queue plan as a published post.
+- Sign-in, name and Instagram connect status: live (`/web/api/me`).
+- Photos: uploaded to the hosted buffer (`/web/api/media`), per user.
+- Autopilot: ON/OFF, posts per day, posting times, quiet hours, time zone (`/web/api/autopilot`).
+- Posting to Instagram: pending worker migration (part C). The dashboard shows a notice until then.
+- There is no manual queue: Autopilot decides format and time.

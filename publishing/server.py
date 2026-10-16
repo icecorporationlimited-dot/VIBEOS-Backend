@@ -55,7 +55,18 @@ def _web_media_response(web_login, content_buffer, cookie_header, asset_id, vari
     return 200, data, "video/mp4" if variant == "reel" else "image/jpeg"
 
 
-def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None):
+class web_studio_limits:            # plain holder so tests can lower the cap
+    upload = 45 * 1024 * 1024
+
+
+STUDIO_GET = "/web/api/state"
+STUDIO_JSON_POST = {"/web/api/autopilot": "set_autopilot", "/web/api/media/delete": "delete_media"}
+STUDIO_UPLOAD = "/web/api/media"
+JSON_BODY_LIMIT = 16 * 1024
+
+
+def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None,
+                 web_studio=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):   # keep tokens/codes out of logs
             logger.info("http %s %s", self.command, urlparse(self.path).path)
@@ -105,6 +116,9 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
             if web_login is not None and url.path == "/web/api/me":
                 status, body, headers = web_login.me(self.headers.get("Cookie", ""))
                 return self._send(status, body, "application/json", extra=headers)
+            if web_studio is not None and url.path == STUDIO_GET:
+                status, body, headers = web_studio.state(self.headers.get("Cookie", ""))
+                return self._send(status, body, "application/json", extra=headers)
             if web_login is not None and url.path == "/web":
                 status, body, headers = web_login.home(self.headers.get("Cookie", ""))
                 return self._send(status, body, extra=headers)
@@ -130,8 +144,38 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
                 return self._media(url.path[len("/media/"):-len(".mp4")], "video/mp4")
             self._send(404, "not found", "text/plain")
 
+        def _studio_post(self, path):
+            """JSON + multipart routes of the browser studio (session + CSRF checked inside)."""
+            ctype = self.headers.get("Content-Type", "")
+            is_upload = path == STUDIO_UPLOAD
+            if is_upload and ctype.split(";", 1)[0].strip().lower() != "multipart/form-data":
+                return self._send(415, '{"error":"Expected a photo upload."}', "application/json")
+            if not is_upload and ctype.split(";", 1)[0].strip().lower() != "application/json":
+                return self._send(415, '{"error":"Expected JSON."}', "application/json")
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return self._send(400, '{"error":"Bad request."}', "application/json")
+            limit = web_studio_limits.upload if is_upload else JSON_BODY_LIMIT
+            if size <= 0 or size > limit:
+                return self._send(413, '{"error":"Request too large."}', "application/json")
+            body = self.rfile.read(size)
+            cookie = self.headers.get("Cookie", "")
+            try:
+                if is_upload:
+                    status, out, headers = web_studio.upload(cookie, self.headers, body)
+                else:
+                    status, out, headers = getattr(web_studio, STUDIO_JSON_POST[path])(
+                        cookie, self.headers, body)
+            except Exception:
+                logger.exception("Studio route failed: %s", path)
+                status, out, headers = 500, '{"error":"Something went wrong."}', {}
+            return self._send(status, out, "application/json", extra=headers)
+
         def do_POST(self):
             url = urlparse(self.path)
+            if web_studio is not None and (url.path == STUDIO_UPLOAD or url.path in STUDIO_JSON_POST):
+                return self._studio_post(url.path)
             if web_login is None or url.path not in ("/logout", "/web/instagram/connect"):
                 return self._send(404, "not found", "text/plain")
             if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/x-www-form-urlencoded":
@@ -217,9 +261,11 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
     return Handler
 
 
-def start_server(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None):
+def start_server(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None,
+                 web_studio=None):
     httpd = ThreadingHTTPServer(("0.0.0.0", cfg.http_port),
-                                make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login, content_buffer=content_buffer))
+                                make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login,
+                                             content_buffer=content_buffer, web_studio=web_studio))
     thread = threading.Thread(target=httpd.serve_forever, name="vibeos-http",
                               daemon=True)
     thread.start()

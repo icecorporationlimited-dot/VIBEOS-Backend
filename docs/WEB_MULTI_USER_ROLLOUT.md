@@ -51,6 +51,16 @@ The worker execution loop still uses Telegram account resolution and internal jo
 
 This is only the enqueue primitive. The scheduler and execution path remain Telegram-only and must continue to reject web-owned jobs. Do not expose browser-side publishing or enable web jobs until tenant-aware token/media resolution, state transitions, browser-safe outcome reporting, and end-to-end tests are complete.
 
+## Browser upload and Autopilot API (part B)
+
+- [x] `POST /web/api/media` stores photos straight into the server-side ContentBuffer under the verified web owner (`owner_id`, never `telegram_id`). Files are re-encoded to JPEG (EXIF/GPS stripped), capped at 10 photos / 10 MB each, and counted against the per-user daily upload quota.
+- [x] `GET /web/api/state`, `POST /web/api/media/delete`, `POST /web/api/autopilot` are session-authenticated and owner-scoped. Writes also need an exact `Origin`, the CSRF cookie, and the matching `X-CSRF-Token` header.
+- [x] Autopilot ON for a web user means autofill + full auto: `WebIngest` (one background thread) analyses, de-duplicates, scores, edits, captions and marks photos `ready`. OFF leaves photos waiting in the buffer; switching ON catches up.
+- [x] The manual browser queue is gone. The UI shows Autopilot ON/OFF, daily limit, posting times, quiet hours, time zone and per-photo status.
+- [x] `ContentBuffer` accepts a web `Principal` everywhere (add/list/delete/shortlist/quota); plain Telegram IDs keep the old behaviour.
+
+This does not publish anything. `WebStudio.posting_engine` stays `False` (and the UI says so) until the worker (part C) schedules and posts web-owned jobs; set `Worker.handles_web_owners = True` then.
+
 ## Remaining before public multi-user publishing
 
 - [x] Add a browser Instagram OAuth flow bound to the authenticated web principal and a one-time browser state cookie.

@@ -596,6 +596,13 @@ class PublishService:
         rows = self.jobs.find(_owned_query(Principal.from_telegram(telegram_id), {"telegram_id": str(telegram_id)}))
         return sorted(rows, key=lambda j: j["created_at"], reverse=True)[:limit]
 
+    def jobs_for(self, principal, limit=200):
+        """Newest jobs belonging only to this verified principal (any status)."""
+        if not isinstance(principal, Principal):
+            raise TypeError("A verified Principal is required.")
+        rows = self.jobs.find(_owned_query(principal, {}))
+        return sorted(rows, key=lambda j: j["created_at"], reverse=True)[:limit]
+
     def due_jobs(self):
         """Jobs a worker may run now: due queued/retry jobs, plus `running` jobs whose
         lease expired (the process that owned them died / restarted)."""

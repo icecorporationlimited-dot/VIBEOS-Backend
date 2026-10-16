@@ -40,6 +40,8 @@ from publishing.web_auth import WebSessionStore
 from publishing.web_routes import WebLoginRoutes
 from publishing.web_instagram import WebInstagramConnect
 from publishing.web_config import load_web_auth_settings
+from publishing.web_studio import WebStudio
+from publishing.web_pipeline import WebIngest, WebPipeline
 from publishing.service import PublishService, PublishError
 from publishing.accounts import NotConnected
 
@@ -52,9 +54,11 @@ STATUS_ICON = {"queued": "🕒", "running": "⏳", "retry": "🔁", "published":
 
 class Runtime:
     def __init__(self, cfg, oauth, accounts, service, httpd=None,
-                 autopilot=None, calendar=None, worker=None, tz_for=None):
+                 autopilot=None, calendar=None, worker=None, tz_for=None,
+                 web_ingest=None):
         self.cfg, self.oauth, self.accounts = cfg, oauth, accounts
         self.service, self.httpd = service, httpd
+        self.web_ingest = web_ingest
         self.autopilot, self.calendar, self.worker = autopilot, calendar, worker
         self.tz_for = tz_for
 
@@ -157,17 +161,35 @@ def build_runtime(db, content_buffer, bot_token):
         instagram_connect.ensure_indexes()
         web_login = WebLoginRoutes(cfg, oidc, sessions, instagram_connect, accounts)
 
+    web_studio = web_ingest = None
+    if web_login is not None:
+        def _groq():
+            from groq import Groq
+            return Groq(api_key=getattr(app_settings, "GROQ_API_KEY", ""))
+        pipeline = WebPipeline(
+            content_buffer, _groq,
+            getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b"),
+            language=getattr(app_settings, "CAPTION_LANGUAGE", "english"))
+        web_ingest = WebIngest(content_buffer, autopilot, pipeline)
+        web_studio = WebStudio(
+            cfg, sessions, content_buffer, autopilot, accounts=accounts,
+            service=service, ingest=web_ingest,
+            posting_engine=getattr(worker, "handles_web_owners", False))
+
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
-        content_buffer=content_buffer,
+        content_buffer=content_buffer, web_studio=web_studio,
     )
     return Runtime(cfg, oauth, accounts, service, httpd,
-                   autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for)
+                   autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for,
+                   web_ingest=web_ingest)
 
 
 def start_worker(rt):
     if rt is not None and rt.worker is not None:
         rt.worker.start()
+    if rt is not None and rt.web_ingest is not None:
+        rt.web_ingest.start()
 
 
 def shutdown(rt):
@@ -176,6 +198,8 @@ def shutdown(rt):
         return
     if rt.worker is not None:
         rt.worker.stop()
+    if rt.web_ingest is not None:
+        rt.web_ingest.stop()
     if rt.httpd is not None:
         rt.httpd.shutdown()
 

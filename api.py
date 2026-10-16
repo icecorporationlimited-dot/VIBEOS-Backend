@@ -186,6 +186,28 @@ async def api_caption(
     raise HTTPException(502, "AI caption failed. Try again.")
 
 
+# Security headers for the hosted UI (the bot's own server already sets its own).
+_UI_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; "
+    "base-uri 'none'; frame-ancestors 'none'; "
+    "form-action 'self' https://www.instagram.com https://api.instagram.com "
+    "https://www.facebook.com https://m.facebook.com"
+)
+
+
+@app.middleware("http")
+async def ui_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/app" or request.url.path.startswith("/app/"):
+        response.headers["Content-Security-Policy"] = _UI_CSP
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ------------------------------------------------- hosted web UI (same origin)
 # Served from here so the login/CSRF cookies of /login and /web/* are first-party.
 _WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -198,7 +220,7 @@ _HOP = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"
         "proxy-authorization", "proxy-authenticate", "trailers", "content-length",
         "content-encoding"}
 _client = httpx.AsyncClient(
-    base_url=f"http://127.0.0.1:{INTERNAL_PORT}", follow_redirects=False, timeout=30
+    base_url=f"http://127.0.0.1:{INTERNAL_PORT}", follow_redirects=False, timeout=90
 )
 
 

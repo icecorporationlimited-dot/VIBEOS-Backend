@@ -108,19 +108,40 @@ class MemoryBlobStore:
 # ---------------------------------------------------------------------------
 # Buffer
 # ---------------------------------------------------------------------------
+def _scope(user):
+    """Return (query, stamp) that scope assets to exactly one owner.
+
+    * plain Telegram ID (legacy entry point): unchanged behaviour,
+      query {"telegram_id": id}, stamp {"telegram_id": id}.
+    * web Principal: query {"owner_id": "web:<id>"}, stamp {"owner_id": ...}.
+      Web assets never carry a telegram_id and are never matched by one.
+    * Telegram Principal: treated like its plain Telegram ID.
+    """
+    if isinstance(user, Principal):
+        if user.kind == "web":
+            return {"owner_id": user.owner_id}, {"owner_id": user.owner_id}
+        user = user.subject
+    owner = str(user)
+    return {"telegram_id": owner}, {"telegram_id": owner}
+
+
 class ContentBuffer:
     def __init__(self, assets, blobs):
         self.assets = assets
         self.blobs = blobs
 
     def ensure_indexes(self):
+        self.assets.create_index([("owner_id", 1), ("sha256", 1)], sparse=True)
+        self.assets.create_index([("owner_id", 1), ("batch_id", 1)], sparse=True)
+        self.assets.create_index([("owner_id", 1), ("status", 1)], sparse=True)
+        self.assets.create_index([("owner_id", 1), ("created_at", 1)], sparse=True)
         self.assets.create_index([("telegram_id", 1), ("sha256", 1)])
         self.assets.create_index([("telegram_id", 1), ("batch_id", 1)])
         self.assets.create_index([("telegram_id", 1), ("status", 1)])
         self.assets.create_index([("telegram_id", 1), ("created_at", 1)])
 
     # ---- quota -----------------------------------------------------------
-    def _check_quota(self, owner):
+    def _check_quota(self, user):
         """Raise QuotaExceeded if this user already added too many assets in 24h.
 
         Counts only this user's rows, so one user can never use up another's
@@ -130,7 +151,8 @@ class ContentBuffer:
         if count is None:
             return
         since = _now() - timedelta(hours=24)
-        used = count({"telegram_id": owner, "created_at": {"$gte": since}})
+        flt, _ = _scope(user)
+        used = count({**flt, "created_at": {"$gte": since}})
         if used >= _daily_upload_limit():
             raise QuotaExceeded("daily upload limit reached")
 
@@ -147,23 +169,23 @@ class ContentBuffer:
         if len(data) > MAX_MEDIA_BYTES[kind]:
             raise MediaTooLarge(f"{kind} exceeds size limit")
 
-        owner = str(user_id)
+        flt, stamp = _scope(user_id)
         digest = hashlib.sha256(data).hexdigest()
 
         existing = self.assets.find_one({
-            "telegram_id": owner,
+            **flt,
             "sha256": digest,
             "status": {"$in": [UPLOADED, ANALYZED, SELECTED, READY]},
         })
         if existing:
             return {"asset": existing, "duplicate": True}
 
-        self._check_quota(owner)
+        self._check_quota(user_id)
         blob_id = self.blobs.put(data, filename=filename)
         now = _now()
         doc = {
             "_id": uuid.uuid4().hex,
-            "telegram_id": owner,
+            **stamp,
             "kind": kind,
             "batch_id": batch_id,
             "filename": filename,
@@ -192,18 +214,18 @@ class ContentBuffer:
         """
         if len(data) > MAX_MEDIA_BYTES["video"]:
             raise MediaTooLarge("video exceeds size limit")
-        owner = str(user_id)
+        flt, stamp = _scope(user_id)
         digest = hashlib.sha256(data).hexdigest()
         existing = self.assets.find_one({
-            "telegram_id": owner, "sha256": digest,
+            **flt, "sha256": digest,
             "status": {"$in": [UPLOADED, ANALYZED, SELECTED, READY]}})
         if existing:
             return {"asset": existing, "duplicate": True}
-        self._check_quota(owner)
+        self._check_quota(user_id)
         blob_id = self.blobs.put(data, filename=f"reel_{digest[:12]}.mp4")
         now = _now()
         doc = {
-            "_id": uuid.uuid4().hex, "telegram_id": owner, "kind": "video",
+            "_id": uuid.uuid4().hex, **stamp, "kind": "video",
             "batch_id": batch_id, "filename": f"reel_{digest[:12]}.mp4",
             "source": "reel_builder", "sha256": digest, "size_bytes": len(data),
             "blob_id": blob_id, "status": READY,
@@ -226,8 +248,8 @@ class ContentBuffer:
         {"duplicate": True}. The route is pinned to "story" so the normal photo
         autofill never turns the card into a feed post.
         """
-        owner = str(user_id)
-        existing = self.assets.find_one({"telegram_id": owner, "trend_key": trend_key})
+        flt, stamp = _scope(user_id)
+        existing = self.assets.find_one({**flt, "trend_key": trend_key})
         if existing:
             return {"asset": existing, "duplicate": True}
         if len(data) > MAX_MEDIA_BYTES["photo"]:
@@ -236,7 +258,7 @@ class ContentBuffer:
         blob_id = self.blobs.put(data, filename=f"trend_{asset_id[:8]}.jpg")
         now = _now()
         doc = {
-            "_id": asset_id, "telegram_id": owner, "kind": "photo", "batch_id": None,
+            "_id": asset_id, **stamp, "kind": "photo", "batch_id": None,
             "filename": f"trend_{asset_id[:8]}.jpg", "source": "trend_story",
             "trend_key": trend_key, "sha256": hashlib.sha256(data).hexdigest(),
             "size_bytes": len(data), "blob_id": blob_id, "status": READY,
@@ -325,7 +347,7 @@ class ContentBuffer:
             earlier -> rejected (never post the same picture twice)
           * among similar shots (<= SIMILAR_DISTANCE) keep only the best one
         """
-        owner = str(user_id)
+        owner = user_id if isinstance(user_id, Principal) else str(user_id)
         candidates = [
             a for a in self.list_assets(owner, batch_id=batch_id, status=ANALYZED)
             if a["kind"] == "photo" and a["analysis"] and a["analysis"].get("dhash")
@@ -436,7 +458,7 @@ class ContentBuffer:
 
     # ---- queries ---------------------------------------------------------
     def list_assets(self, user_id, status=None, batch_id=None) -> list:
-        flt = {"telegram_id": str(user_id)}
+        flt, _ = _scope(user_id)
         if status:
             flt["status"] = status
         if batch_id is not None:
@@ -492,8 +514,8 @@ class ContentBuffer:
         The owner filter is included in both lookup and deletion so guessing
         another user's asset ID cannot remove their content.
         """
-        owner = str(user_id)
-        asset = self.assets.find_one({"_id": str(asset_id), "telegram_id": owner})
+        flt, _ = _scope(user_id)
+        asset = self.assets.find_one({"_id": str(asset_id), **flt})
         if not asset:
             return False
 
@@ -505,7 +527,7 @@ class ContentBuffer:
             blob_ids.update(str(value) for value in variants.values() if value)
 
         # Delete the tenant-owned row first; only then clean up its stored files.
-        result = self.assets.delete_one({"_id": asset["_id"], "telegram_id": owner})
+        result = self.assets.delete_one({"_id": asset["_id"], **flt})
         if result.deleted_count != 1:
             return False
         for blob_id in blob_ids:
@@ -519,7 +541,7 @@ class ContentBuffer:
 
     def delete_all_assets(self, user_id) -> int:
         """Permanently delete every content-buffer asset belonging to this user."""
-        owner = str(user_id)
+        owner = user_id if isinstance(user_id, Principal) else str(user_id)
         ids = [a["_id"] for a in self.list_assets(owner)]
         deleted = 0
         for asset_id in ids:
