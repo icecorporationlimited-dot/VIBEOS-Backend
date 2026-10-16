@@ -7,6 +7,7 @@ Simple, predictable rules (Phase 5 analytics can later replace the slot list):
   * never on a day that already has `daily_limit` posts (published + scheduled)
   * never closer than `min_gap_minutes` to another post
 """
+import random
 from datetime import datetime, time, timedelta, timezone
 
 from . import service as svc
@@ -38,7 +39,7 @@ class Calendar:
                     times.append(_aware(when))
         return times
 
-    def next_slot(self, telegram_id, horizon_days=7, not_before=None, not_after=None):
+    def next_slot(self, telegram_id, horizon_days=10, not_before=None, not_after=None):
         """Next free slot as UTC datetime.
 
         Optional aware local datetimes constrain the candidate window; normal
@@ -61,7 +62,12 @@ class Calendar:
         gap = timedelta(minutes=s["min_gap_minutes"])
         busy = self._busy_times(telegram_id)
 
-        for offset in range(horizon_days + 1):
+        # Spread general content over the whole planning horizon instead of
+        # always filling tomorrow's first slot. Constrained event/date windows
+        # remain constrained by not_before/not_after.
+        offsets = list(range(horizon_days + 1))
+        random.shuffle(offsets)
+        for offset in offsets:
             day = local_now.date() + timedelta(days=offset)
             day_local = datetime.combine(day, time(12, 0), tzinfo=tz)
             start, end = day_bounds(day_local)
