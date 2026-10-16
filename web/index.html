@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeOS</title>
+<style>
+  :root{--bg:#0e0e12;--card:#18181f;--line:#2a2a35;--fg:#f2f2f5;--mut:#9a9aa8;--acc:#8b5cf6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif}
+  main{max-width:640px;margin:0 auto;padding:16px}
+  h1{font-size:22px;margin:8px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+  select,input[type=text],input[type=password],textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#101016;color:var(--fg);font:inherit}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button{width:100%;padding:12px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 16px system-ui;margin-top:12px}
+  button.sec{background:#2a2a35}
+  button:disabled{opacity:.5}
+  img{width:100%;border-radius:12px;display:block}
+  .msg{color:var(--mut);font-size:14px;min-height:20px;margin-top:8px}
+  .err{color:#ff7a7a}
+  .tags{color:var(--acc);word-break:break-word}
+</style>
+</head>
+<body>
+<main>
+  <h1>✨ VibeOS</h1>
+
+  <div class="card" id="keyCard">
+    <label for="key">Access key</label>
+    <input id="key" type="password" placeholder="WEB_API_KEY" autocomplete="off">
+    <button id="saveKey" class="sec">Save key</button>
+  </div>
+
+  <div class="card">
+    <input id="file" type="file" accept="image/*">
+    <div class="row">
+      <div><label for="style">Filter</label><select id="style"></select></div>
+      <div><label for="size">Size</label><select id="size"></select></div>
+    </div>
+    <label for="text">Text on photo (optional)</label>
+    <input id="text" type="text" maxlength="80">
+    <div class="row">
+      <div><label for="tstyle">Text style</label><select id="tstyle"></select></div>
+      <div><label for="tpos">Position</label><select id="tpos"></select></div>
+    </div>
+    <button id="editBtn">Edit photo</button>
+    <div class="msg" id="editMsg"></div>
+    <img id="preview" alt="" hidden>
+    <a id="dl" hidden><button class="sec" type="button">Download</button></a>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div><label for="mode">Caption style</label><select id="mode"></select></div>
+      <div><label for="lang">Language</label><select id="lang"></select></div>
+    </div>
+    <button id="capBtn">Write caption</button>
+    <div class="msg" id="capMsg"></div>
+    <label for="caption">Caption</label>
+    <textarea id="caption" rows="4"></textarea>
+    <label>Hashtags</label>
+    <div class="tags" id="tags"></div>
+    <button id="copyBtn" class="sec" type="button">Copy caption + hashtags</button>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script>
+const API = (window.VIBEOS_API || "").replace(/\/$/, "");
+const $ = id => document.getElementById(id);
+let key = localStorage.getItem("vibeos_key") || "";
+$("key").value = key;
+if (key) $("keyCard").hidden = true;
+
+$("saveKey").onclick = () => {
+  key = $("key").value.trim();
+  localStorage.setItem("vibeos_key", key);
+  $("keyCard").hidden = !!key;
+  loadOptions();
+};
+
+function fill(sel, items, def) {
+  $(sel).innerHTML = items.map(v => `<option${v === def ? " selected" : ""}>${v}</option>`).join("");
+}
+
+async function call(path, opts = {}) {
+  const r = await fetch(API + path, { ...opts, headers: { "X-API-Key": key } });
+  if (r.status === 401) { $("keyCard").hidden = false; throw new Error("Wrong access key"); }
+  if (!r.ok) {
+    let d = ""; try { d = (await r.json()).detail; } catch (_) {}
+    throw new Error(d || ("Error " + r.status));
+  }
+  return r;
+}
+
+async function loadOptions() {
+  if (!key) return;
+  try {
+    const o = await (await call("/api/options")).json();
+    fill("style", o.styles, "natural"); fill("size", o.sizes, "post");
+    fill("tstyle", o.text_styles); fill("tpos", o.text_positions);
+    fill("mode", o.caption_styles, "natural"); fill("lang", o.languages);
+  } catch (e) { $("editMsg").textContent = e.message; $("editMsg").className = "msg err"; }
+}
+
+function form() {
+  const f = $("file").files[0];
+  if (!f) throw new Error("Pick a photo first");
+  const fd = new FormData();
+  fd.append("file", f);
+  return fd;
+}
+
+async function busy(btn, msgEl, work, label) {
+  btn.disabled = true; msgEl.className = "msg"; msgEl.textContent = label;
+  try { await work(); msgEl.textContent = ""; }
+  catch (e) { msgEl.className = "msg err"; msgEl.textContent = e.message; }
+  btn.disabled = false;
+}
+
+$("editBtn").onclick = () => busy($("editBtn"), $("editMsg"), async () => {
+  const fd = form();
+  fd.append("style", $("style").value); fd.append("size", $("size").value);
+  fd.append("text", $("text").value); fd.append("text_style", $("tstyle").value);
+  fd.append("text_position", $("tpos").value);
+  const blob = await (await call("/api/edit", { method: "POST", body: fd })).blob();
+  const url = URL.createObjectURL(blob);
+  $("preview").src = url; $("preview").hidden = false;
+  $("dl").href = url; $("dl").download = "vibeos.jpg"; $("dl").hidden = false;
+}, "Editing… (first request can take ~30s if the server was asleep)");
+
+$("capBtn").onclick = () => busy($("capBtn"), $("capMsg"), async () => {
+  const fd = form();
+  fd.append("vibe", $("style").value); fd.append("mode", $("mode").value);
+  fd.append("language", $("lang").value);
+  const d = await (await call("/api/caption", { method: "POST", body: fd })).json();
+  $("caption").value = d.caption;
+  $("tags").textContent = (d.hashtags || []).join(" ");
+  if (d.overlay && !$("text").value) $("text").value = d.overlay;
+}, "Writing caption…");
+
+$("copyBtn").onclick = async () => {
+  await navigator.clipboard.writeText($("caption").value + "\n\n" + $("tags").textContent);
+  $("copyBtn").textContent = "Copied ✓";
+  setTimeout(() => $("copyBtn").textContent = "Copy caption + hashtags", 1500);
+};
+
+loadOptions();
+</script>
+</body>
+</html>
