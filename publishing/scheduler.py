@@ -416,6 +416,47 @@ class Worker:
             slot = self.calendar.next_slot(tg)
         return slot, meta
 
+    PREPARING_WINDOW = timedelta(minutes=10)
+
+    def _batches_still_preparing(self, tg):
+        """Batch ids with photos still being analysed/edited a moment ago.
+
+        Full auto makes photos ready one by one. Routing too early would see
+        only 1-2 of them and lock each in as a lone photo, so a batch (carousel
+        / Reel candidate) waits until its last photo settles. The wait is capped:
+        photos untouched for PREPARING_WINDOW no longer hold anything back.
+        """
+        cutoff = self.clock() - self.PREPARING_WINDOW
+        held = set()
+        for a in self.buffer.list_assets(tg):
+            if a.get("status") not in ("uploaded", "analyzed", "selected"):
+                continue
+            if a.get("batch_id") is None:
+                continue
+            touched = a.get("updated_at") or a.get("created_at")
+            if touched is not None and _aware(touched) > cutoff:
+                held.add(a["batch_id"])
+        return held
+
+    def _story_companion(self, tg, asset_id, photo_slot, extra):
+        """Also queue the same photo as a Story, later the same local day."""
+        asset = self.buffer.assets.find_one({"_id": asset_id}) or {}
+        if "story" not in ((asset.get("creative") or {}).get("variants") or {}):
+            return
+        when = self.calendar.companion_slot(tg, photo_slot)
+        if when is None:
+            return
+        try:
+            job = self.service.enqueue(tg, [asset_id], "story",
+                                       scheduled_at=when, source="scheduled")
+        except (PublishError, NotConnected):
+            return
+        if job.get("duplicate"):
+            return
+        fields = {k: v for k, v in extra.items() if k != "route"}
+        fields["companion"] = True
+        self.service.jobs.update_one({"_id": job["_id"]}, {"$set": fields})
+
     def _autofill(self):
         for tg in self.autopilot.enabled_users():
             settings = self.autopilot.get(tg)
@@ -426,12 +467,15 @@ class Worker:
                 continue
             room = settings["daily_limit"] * 2 - len(
                 [j for j in self.service.queue(tg)
-                 if j["status"] in (svc.QUEUED, svc.RETRY) and j.get("source") == "scheduled"])
+                 if j["status"] in (svc.QUEUED, svc.RETRY) and j.get("source") == "scheduled"
+                 and not j.get("companion")])      # a photo's Story rides along, no extra room
             if room <= 0:
                 continue
+            held = self._batches_still_preparing(tg)
             ready = [a for a in sorted(self.buffer.list_assets(tg, "ready"),
                                        key=lambda a: a["created_at"])
-                     if not a.get("last_published_at")]
+                     if not a.get("last_published_at")
+                     and a.get("batch_id") not in held]
             if not ready:
                 continue
             reels_on = "reel" in settings["formats"] and self._reels_ready(tg)
@@ -472,6 +516,9 @@ class Worker:
                     extra.update({"planning": meta, "event_key": meta.get("event"),
                                   "event_date": meta.get("event_date")})
                 self.service.jobs.update_one({"_id": job["_id"]}, {"$set": extra})
+                if (route["format"] == "photo" and len(route["asset_ids"]) == 1
+                        and "story" in settings["formats"]):
+                    self._story_companion(tg, route["asset_ids"][0], slot, extra)
 
     # ---- tokens ----------------------------------------------------------
     def _check_tokens(self):
