@@ -27,6 +27,7 @@ import httpx
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 import copywriter
 import settings
@@ -183,6 +184,13 @@ async def api_caption(
             logger.warning("caption attempt %s failed: %s", attempt + 1, exc)
     logger.error("caption failed: %s", last_error)
     raise HTTPException(502, "AI caption failed. Try again.")
+
+
+# ------------------------------------------------- hosted web UI (same origin)
+# Served from here so the login/CSRF cookies of /login and /web/* are first-party.
+_WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+if os.path.isdir(_WEB_DIR):
+    app.mount("/app", StaticFiles(directory=_WEB_DIR, html=True), name="webui")
 
 
 # ------------------------------------------------- proxy to the bot's server
