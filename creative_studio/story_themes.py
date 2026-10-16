@@ -336,7 +336,7 @@ def _chip(img, draw, theme, text, y=300):
 
 
 def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, brand: str = "VIBEOS",
-                 footer: str = "") -> Path:
+                 footer: str = "", seed: str = "") -> Path:
     """Render one Story from an AI/user plan:
        {kind, headline, subline, chip, emojis[], photo_credit}. Raises ValueError on bad input."""
     kind = str(plan.get("kind", "general")).lower()
@@ -352,7 +352,7 @@ def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, b
         headline = headline.upper()
 
     img = _gradient(*theme["grad"])
-    _paint(img, kind, theme, headline)
+    _paint(img, kind, theme, headline + str(seed))
     draw = ImageDraw.Draw(img)
 
     if kind == "solemn":
