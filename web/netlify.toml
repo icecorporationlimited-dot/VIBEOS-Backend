@@ -1,0 +1,16 @@
+[build]
+  publish = "."
+
+# The app now runs from the VIBEOS backend (same origin = working login cookies).
+[[redirects]]
+  from = "/*"
+  to = "https://vibeos-backend.onrender.com/app/:splat"
+  status = 301
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
