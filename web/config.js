@@ -1,2 +1,2 @@
 // Put your Render URL here (no trailing slash).
-window.VIBEOS_API = "https://YOUR-SERVICE.onrender.com";
+window.VIBEOS_API = "https://vibeos-backend.onrender.com";
