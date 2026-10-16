@@ -11,6 +11,16 @@ from datetime import datetime, timedelta, timezone
 
 from .identity import IdentityError, Principal
 
+from bson import ObjectId
+
+
+def _id_candidates(value):
+    out = [value]
+    try:
+        out.append(ObjectId(value))
+    except Exception:
+        pass
+    return out
 
 SESSION_COOKIE = "__Host-vibeos_session"
 DEFAULT_TTL_SECONDS = 60 * 60 * 8
@@ -105,7 +115,7 @@ class WebSessionStore:
             self.sessions.delete_one({"token_hash": _digest(token)})
             return None
         user = self.users.find_one({
-            "_id": session.get("user_id"),
+            "_id": {"$in": _id_candidates(session.get("user_id"))},
             "disabled": {"$ne": True},
         })
         if not user:
@@ -125,7 +135,7 @@ class WebSessionStore:
         if not session or _aware(session.get("expires_at")) <= self.clock():
             return False
         user = self.users.find_one({
-            "_id": session.get("user_id"),
+            "_id": {"$in": _id_candidates(session.get("user_id"))},
             "disabled": {"$ne": True},
         })
         if not user:
