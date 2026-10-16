@@ -12,6 +12,7 @@ source headlines, and everything it returns is sanitised here (fail-closed):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 
@@ -53,11 +54,23 @@ EMOJI_RE = re.compile(
     "([\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2300-\u23FF][\uFE0F\u200D]*)")
 
 
-def build_user_prompt(item: dict) -> str:
+ANGLES = ("playful and witty", "warm and heartfelt", "hype and energetic", "cool and minimal",
+          "nostalgic and sentimental", "bold and punchy", "casual desi-friend chat", "dreamy and poetic")
+SUBLINES = ("Everyone is talking about this right now", "This one is blowing up today",
+            "The internet cannot stop talking about it", "Catch up on what is trending", "Your daily dose of what is buzzing")
+
+
+def _pick(options, variant):
+    h = int(hashlib.sha1(str(variant).encode("utf-8")).hexdigest()[:8], 16)
+    return options[h % len(options)]
+
+
+def build_user_prompt(item: dict, variant: str = "") -> str:
     lines = [f"- {n.get('title', '')} ({n.get('source', '')})" for n in (item.get("news") or [])[:5]]
     region = (item.get("evidence") or {}).get("region", "")
+    tone = f"\nStyle for this creator: {_pick(ANGLES, variant)} (never change facts or the kind rules).\n" if variant else ""
     return (f"<data>\nTrend: {str(item.get('title', ''))[:200]}\nRegion: {region}\n"
-            f"Headlines:\n" + "\n".join(lines) + "\n</data>")
+            f"Headlines:\n" + "\n".join(lines) + "\n</data>" + tone)
 
 
 def parse_plan(text: str) -> dict:
@@ -129,7 +142,7 @@ def sanitize_plan(raw: dict, item: dict, *, can_shape_devanagari=False) -> dict 
         return None
 
 
-def fallback_plan(item: dict) -> dict | None:
+def fallback_plan(item: dict, variant: str = "") -> dict | None:
     """No AI available: only harmless categories, English text from the trend term itself."""
     title = str(item.get("title", "")).strip()
     if not title or not safety.is_latin_title(title) or verify.has_tragedy_words(verify.item_text(item)):
@@ -143,18 +156,18 @@ def fallback_plan(item: dict) -> dict | None:
         return None
     kind, emoji, chip = mapping[cat]
     return {"kind": kind, "sensitive": False, "confirmed": False, "confidence": 0.75, "person": "",
-            "headline": _clean(title, 60) + " " + emoji, "subline": "Everyone is talking about this right now",
+            "headline": _clean(title, 60) + " " + emoji, "subline": _pick(SUBLINES, variant) if variant else SUBLINES[0],
             "chip": chip, "emojis": [emoji], "source": "fallback"}
 
 
-def plan_story(item: dict, ai) -> dict | None:
+def plan_story(item: dict, ai, variant: str = "") -> dict | None:
     """AI plan if possible, else fallback. `ai` needs .ready and .chat(system, user)."""
     if ai is not None and getattr(ai, "ready", False):
         try:
-            raw = parse_plan(ai.chat(SYSTEM, build_user_prompt(item), temperature=0.6, max_tokens=350))
+            raw = parse_plan(ai.chat(SYSTEM, build_user_prompt(item, variant), temperature=0.8, max_tokens=350))
             plan = sanitize_plan(raw, item)
             if plan:
                 return plan
         except Exception:
             pass
-    return fallback_plan(item)
+    return fallback_plan(item, variant)
