@@ -7,7 +7,7 @@ means the account has to go quiet.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 from event_calendar import find_event
@@ -51,6 +51,28 @@ class ContentPlanner:
     def schedule_for(self, telegram_id, asset: dict):
         """Return (UTC datetime or None, metadata). None means use normal slots."""
         detection = self.classify_asset(telegram_id, asset)
+        tz = get_zone(self.tz_for(telegram_id))
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+
+        # A clearly printed date on a poster/invitation takes precedence over
+        # generic slots and festival matching. For dates without a year, use
+        # the next upcoming occurrence; never invent a date if parsing fails.
+        raw_date = str(detection.get("visible_date_text") or "").strip()
+        explicit_date, has_year = _parse_visible_date(raw_date, now_local.date())
+        if explicit_date:
+            if explicit_date >= now_local.date():
+                not_before = datetime.combine(explicit_date, time(0, 0), tzinfo=tz)
+                not_after = datetime.combine(explicit_date, time(23, 59), tzinfo=tz)
+                when = self.calendar.next_slot(
+                    telegram_id, horizon_days=1, not_before=not_before, not_after=not_after)
+                if when is not None:
+                    return when, {"event_status": "date_pinned", "event_date": explicit_date.isoformat(),
+                                  "visible_date_text": raw_date, "event_detection": detection}
+                return None, {"event_status": "date_full", "event_date": explicit_date.isoformat(),
+                              "visible_date_text": raw_date, "event_detection": detection}
+            return None, {"event_status": "printed_date_passed", "event_date": explicit_date.isoformat(),
+                          "visible_date_text": raw_date, "event_detection": detection}
+
         if not detection.get("event_related") or detection.get("confidence", 0) < self.min_confidence:
             return None, {"event_status": "general_or_uncertain", "event_detection": detection}
         key = detection.get("event_key", "")
@@ -58,8 +80,6 @@ class ContentPlanner:
         if not event:
             return None, {"event_status": "no_calendar_match", "event_detection": detection}
 
-        tz = get_zone(self.tz_for(telegram_id))
-        now_local = datetime.now(timezone.utc).astimezone(tz)
         start_day = event["date"] - timedelta(days=event["window_before_days"])
         end_day = event["date"] + timedelta(days=event["window_after_days"])
         if now_local.date() > end_day:
@@ -78,3 +98,31 @@ class ContentPlanner:
         return when, {"event_status": "reserved", "event": event["key"],
                       "event_name": event["name"], "event_date": event["date"].isoformat(),
                       "event_detection": detection}
+
+
+def _parse_visible_date(text: str, today: date):
+    """Parse dates explicitly printed in content. Returns (date, has_year)."""
+    if not text:
+        return None, False
+    import re
+    from datetime import datetime as _dt
+
+    cleaned = re.sub(r"[,]+", " ", text).strip()
+    formats = (
+        ("%Y-%m-%d", True), ("%d-%m-%Y", True), ("%d/%m/%Y", True),
+        ("%m/%d/%Y", True), ("%d %B %Y", True), ("%B %d %Y", True),
+        ("%d %b %Y", True), ("%b %d %Y", True),
+        ("%d %B", False), ("%B %d", False), ("%d %b", False), ("%b %d", False),
+    )
+    for fmt, has_year in formats:
+        try:
+            parsed = _dt.strptime(cleaned, fmt).date()
+            if not has_year:
+                parsed = parsed.replace(year=today.year)
+                if parsed < today:
+                    parsed = parsed.replace(year=today.year + 1)
+            return parsed, has_year
+        except ValueError:
+            continue
+    # Numeric day/month without a year is ambiguous in some regions; don't guess.
+    return None, False
