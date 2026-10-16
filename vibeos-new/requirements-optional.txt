@@ -1,2 +1,0 @@
-# Optional: better face detection for the smart crop (editor.py picks it up automatically)
-opencv-python-headless
