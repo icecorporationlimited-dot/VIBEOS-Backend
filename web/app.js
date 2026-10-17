@@ -6,7 +6,7 @@
   //   GET  /web/api/state       photos, counts, autopilot settings, recent posts
   //   POST /web/api/media       upload photos (multipart) straight to the server buffer
   //   POST /web/api/media/delete
-  //   POST /web/api/autopilot   switch on/off, daily limit, times, quiet hours
+  //   POST /web/api/autopilot   switch on/off, daily limit, times, quiet hours, reels, trend stories, comment replies
   const $ = id => document.getElementById(id);
   const escapeHTML = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -158,6 +158,11 @@
       if (document.activeElement !== $('slotsInput')) $('slotsInput').value = ap.slots.join(', ');
       $('tzText').textContent = 'Using ' + (ap.timezone || browserTZ() || 'your default zone') + (ap.timezone ? '' : ' (saved when you save settings)');
     }
+    if (ap) {
+      $('reelsToggle').checked = !!ap.reels; $('trendToggle').checked = !!ap.trend_stories;
+      $('repliesToggle').checked = !!ap.auto_replies; $('commentsToggle').checked = !!ap.auto_comments;
+    }
+    ['reelsToggle', 'trendToggle', 'repliesToggle', 'commentsToggle'].forEach(id => { $(id).disabled = !me.signed_in; });
     $('autoStat').textContent = on ? 'On' : 'Off';
     $('autoFoot').textContent = ap ? 'Up to ' + ap.daily_limit + ' post' + (ap.daily_limit === 1 ? '' : 's') + ' a day' : 'Sign in to use Autopilot';
 
@@ -264,6 +269,15 @@
     saveAutopilot(body, on ? 'Autopilot is on' : 'Autopilot is off');
   }));
   ['dailyLimit', 'dailyLimitDash'].forEach(id => $(id).addEventListener('change', e => saveAutopilot({daily_limit: Number(e.target.value)}, 'Daily limit saved')));
+  $('reelsToggle').addEventListener('change', e => saveAutopilot(
+    {formats: e.target.checked ? ['photo', 'story', 'carousel', 'reel'] : ['photo', 'story', 'carousel']},
+    e.target.checked ? 'Reels on' : 'Reels off'));
+  $('trendToggle').addEventListener('change', e => saveAutopilot(
+    {trend_stories: e.target.checked ? 'auto' : 'off'}, e.target.checked ? 'Trend Stories on' : 'Trend Stories off'));
+  $('repliesToggle').addEventListener('change', e => saveAutopilot(
+    {auto_replies: e.target.checked}, e.target.checked ? 'Comment replies on' : 'Comment replies off'));
+  $('commentsToggle').addEventListener('change', e => saveAutopilot(
+    {auto_comments: e.target.checked}, e.target.checked ? 'First comment on' : 'First comment off'));
   $('saveAutopilot').addEventListener('click', () => {
     const slots = $('slotsInput').value.split(/[\s,]+/).filter(Boolean);
     const body = {slots, quiet_start: Number($('quietStart').value), quiet_end: Number($('quietEnd').value)};
