@@ -125,6 +125,11 @@ def _scope(user):
     return {"telegram_id": owner}, {"telegram_id": owner}
 
 
+def owner_query(user):
+    """Public form of the asset ownership selector: one Telegram ID or Principal -> filter."""
+    return _scope(user)[0]
+
+
 class ContentBuffer:
     def __init__(self, assets, blobs):
         self.assets = assets
