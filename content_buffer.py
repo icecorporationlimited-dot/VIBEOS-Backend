@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import media_quality as mq
+import shortlist_engine
 from publishing.identity import Principal, owner_filter
 
 logger = logging.getLogger(__name__)
@@ -345,59 +346,48 @@ class ContentBuffer:
     def select_shortlist(self, user_id, batch_id, n=3) -> dict:
         """Pick up to n best, mutually-different photos from a batch.
 
-        Rules:
+        Smart shortlist (see shortlist_engine.py):
           * only analyzed, readable photos (quality problems affect ranking, not eligibility)
-          * drop near-identical copies (<= DUPLICATE_DISTANCE) -> rejected
-          * drop photos nearly identical to something already selected/ready
-            earlier -> rejected (never post the same picture twice)
-          * among similar shots (<= SIMILAR_DISTANCE) keep only the best one
+          * exact copies of a better frame, or of anything already selected/ready in
+            another batch, are rejected (never post the same picture twice)
+          * bursts / same-moment shots are grouped and only the best frame survives
+            (sharper, eyes open, smiling)
+          * the survivors are ordered strongest-AND-most-varied first (MMR), and that
+            order is stored on each asset as `shortlist_rank`
+        The return shape is unchanged: selected / skipped / rejected.
         """
         owner = user_id if isinstance(user_id, Principal) else str(user_id)
         candidates = [
-            a for a in self.list_assets(owner, batch_id=batch_id, status=ANALYZED)
-            if a["kind"] == "photo" and a["analysis"] and a["analysis"].get("dhash")
+            {"id": a["_id"], "analysis": a["analysis"]}
+            for a in self.list_assets(owner, batch_id=batch_id, status=ANALYZED)
+            if a["kind"] == "photo" and a["analysis"]
+            and (a["analysis"].get("dhash") or a["analysis"].get("phash"))
         ]
-        candidates.sort(key=lambda a: a["analysis"]["quality_score"], reverse=True)
 
-        used_hashes = [
-            a["analysis"]["dhash"]
+        used = [
+            a["analysis"]
             for st in (SELECTED, READY)
             for a in self.list_assets(owner, status=st)
             if a.get("batch_id") != batch_id
-            and a.get("analysis") and a["analysis"].get("dhash")
+            and a.get("analysis")
+            and (a["analysis"].get("dhash") or a["analysis"].get("phash"))
         ]
 
-        picked, skipped = [], []
-        for asset in candidates:
-            h = asset["analysis"]["dhash"]
+        plan = shortlist_engine.plan_shortlist(candidates, used, n)
 
-            if any(mq.hamming(h, u) <= mq.DUPLICATE_DISTANCE for u in used_hashes):
-                self.reject(asset["_id"], "duplicate_of_used")
-                skipped.append((asset["_id"], "duplicate_of_used"))
-                continue
-
-            nearest = min(
-                (mq.hamming(h, p["analysis"]["dhash"]) for p in picked),
-                default=99,
-            )
-            if nearest <= mq.DUPLICATE_DISTANCE:
-                self.reject(asset["_id"], "duplicate_in_batch")
-                skipped.append((asset["_id"], "duplicate_in_batch"))
-                continue
-            if nearest <= mq.SIMILAR_DISTANCE:
-                skipped.append((asset["_id"], "too_similar_to_selected"))
-                continue
-
-            if len(picked) >= n:
-                skipped.append((asset["_id"], "not_in_top_n"))
-                continue
-
-            self._transition(asset["_id"], SELECTED)
-            picked.append(asset)
+        for asset_id, reason in plan["rejected"]:
+            self.reject(asset_id, reason)
+        for asset_id in plan["selected"]:
+            meta = plan["info"].get(asset_id, {})
+            self._transition(asset_id, SELECTED, {
+                "shortlist_rank": meta.get("rank"),
+                "shortlist_cluster_size": meta.get("cluster_size", 1),
+                "shortlist_burst_winner": bool(meta.get("burst_winner")),
+            })
 
         return {
-            "selected": [a["_id"] for a in picked],
-            "skipped": skipped,
+            "selected": list(plan["selected"]),
+            "skipped": list(plan["skipped"]),
             "rejected": [
                 a["_id"] for a in self.list_assets(owner, batch_id=batch_id, status=REJECTED)
             ],

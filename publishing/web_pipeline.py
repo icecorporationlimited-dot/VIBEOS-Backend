@@ -12,6 +12,7 @@ import base64
 import io
 import json
 import logging
+import os
 import queue
 import re
 import threading
@@ -28,6 +29,20 @@ MIN_AUTO_SCORE = 55       # same bar as Telegram full auto
 MAX_ATTEMPTS = 3          # AI/edit failures before a photo is parked as failed
 AI_IMAGE_EDGE = 1024      # downscale before sending to the vision model
 DEFAULT_VIBE = "natural"
+
+
+def _env_int(name, default):
+    try:
+        return max(0, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+# Cost control for big bulk uploads: the free local analysis ranks everything first, the
+# paid AI judge only sees photos worth judging, best first, in fair-sized chunks.
+LOCAL_PREFILTER = _env_int("VIBEOS_LOCAL_PREFILTER", 28)   # local quality below this: no AI call
+AI_CHUNK = _env_int("VIBEOS_AI_CHUNK", 40) or 40           # AI-judged photos per queue turn
+TERMINAL_NOTES = ("low_score", "failed", "blocked")        # never judged twice
 
 
 def _now():
@@ -92,7 +107,7 @@ class WebPipeline:
         )
         return _parse_json(resp.choices[0].message.content)
 
-    def score_and_style(self, image_b64, vibe=None, quality_score=None):
+    def score_and_style(self, image_b64, vibe=None, quality_score=None, local=None):
         """One vision call: rubric score (photo_judge) + AI-chosen edit style.
 
         `vibe` is only a soft preference; the AI picks the style that fits the photo.
@@ -102,7 +117,7 @@ class WebPipeline:
                 self._vision, image_b64,
                 styles=sorted(self.styles),
                 caption_styles=list(copywriter.CAPTION_STYLES),
-                vibe_hint=vibe, quality_score=quality_score)
+                vibe_hint=vibe, quality_score=quality_score, local=local)
         except Exception:
             logger.exception("Web photo scoring failed")
             raise
@@ -139,14 +154,24 @@ class WebPipeline:
         data = self.buffer.get_media_for(principal, asset_id)
         image_b64 = base64.b64encode(_small_jpeg(data)).decode()
         asset = self.buffer.assets.find_one({"_id": asset_id}) or {}
-        quality = (asset.get("analysis") or {}).get("quality_score")
-        verdict = self.score_and_style(image_b64, quality_score=quality)
+        analysis = asset.get("analysis") or {}
+        quality = analysis.get("quality_score")
+        local = analysis.get("deep")
+        verdict = self.score_and_style(image_b64, quality_score=quality, local=local)
         detail = dict(
             web_score=verdict["score"], web_scores=verdict["scores"],
             web_flags=verdict["flags"], web_style=verdict["style"],
             web_style_confidence=verdict["style_confidence"],
             web_style_reason=verdict["style_reason"], web_reason=verdict["reason"],
+            web_passes=verdict.get("passes", 1),
+            web_strengths=verdict.get("strengths", ""),
+            web_weaknesses=verdict.get("weaknesses", ""),
         )
+        if verdict.get("blocked"):
+            # Safety blocker (unsafe content / private info): never auto-post, never retry.
+            self.buffer.release(asset_id)
+            self.note(asset_id, web_note="blocked", updated_at=_now(), **detail)
+            return "skipped"
         if verdict["score"] < MIN_AUTO_SCORE:
             self.buffer.release(asset_id)
             self.note(asset_id, web_note="low_score", updated_at=_now(), **detail)
@@ -239,7 +264,7 @@ class WebIngest:
         batches = []
         for status in (UPLOADED, ANALYZED, SELECTED):
             for a in self.buffer.list_assets(principal, status=status):
-                if a.get("web_note") in ("low_score", "failed"):
+                if a.get("web_note") in TERMINAL_NOTES:
                     continue
                 b = a.get("batch_id")
                 if b and b not in batches:
@@ -272,10 +297,33 @@ class WebIngest:
         count = len(self.buffer.list_assets(principal, batch_id=batch_id)) or 1
         self.buffer.select_shortlist(principal, batch_id, n=count)
         out = {"ready": 0, "skipped": 0, "failed": 0}
-        for asset in self.buffer.list_assets(principal, status=SELECTED, batch_id=batch_id):
+
+        # Best and most varied first (shortlist_rank), so if the owner switches autopilot
+        # off mid-way, or the batch is huge, the strongest photos are already done.
+        selected = sorted(
+            self.buffer.list_assets(principal, status=SELECTED, batch_id=batch_id),
+            key=lambda a: (a.get("shortlist_rank") is None, a.get("shortlist_rank") or 0))
+        judged, deferred = 0, False
+        for asset in selected:
             if not self._active(principal):     # switched off mid-batch: stop spending AI calls
                 self.buffer.release(asset["_id"])
                 continue
+            if asset.get("web_note") in TERMINAL_NOTES:      # already judged before
+                self.buffer.release(asset["_id"])
+                continue
+            quality = (asset.get("analysis") or {}).get("quality_score")
+            if isinstance(quality, (int, float)) and quality < LOCAL_PREFILTER:
+                # Measurably weak: save the AI call. Same outcome as a low AI score.
+                self.buffer.release(asset["_id"])
+                self.pipeline.note(
+                    asset["_id"], web_note="low_score", updated_at=_now(),
+                    web_reason="Pre-filtered: weak measured quality (focus / exposure / framing)")
+                out["skipped"] += 1
+                continue
+            if judged >= AI_CHUNK:                # keep this turn short; the rest follows
+                deferred = True
+                continue
+            judged += 1
             try:
                 result = self.pipeline.prepare(principal, asset["_id"])
                 out[result] += 1
@@ -293,4 +341,6 @@ class WebIngest:
                     timer = threading.Timer(60.0, self.submit, (principal, batch_id))
                     timer.daemon = True
                     timer.start()
+        if deferred and self._active(principal):
+            self.submit(principal, batch_id)             # back of the queue: other owners go first
         return out
