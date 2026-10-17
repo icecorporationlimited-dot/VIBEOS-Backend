@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Callable
 
 from autonomous.decision_engine import decide_content
+from content_buffer import owner_query
 from creative_studio.story_templates import render_trend_story
+from publishing.identity import Principal, document_principal
 from trends import safety
 from trends.schema import make_key
 from trends.smart_story import build_story
@@ -47,20 +49,36 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def _principal(who) -> Principal:
+    """Callers pass a Principal (web or Telegram) or a plain Telegram ID."""
+    return who if isinstance(who, Principal) else Principal.from_telegram(who)
+
+
+def _seed(who) -> str:
+    """Stable per-owner seed. Telegram keeps the plain ID so existing users see no change."""
+    p = _principal(who)
+    return p.subject if p.kind == "telegram" else p.owner_id
+
+
 def posted_last_24h(buffer, tg, now) -> int:
-    rows = buffer.assets.find({"telegram_id": str(tg), "source": "trend_story"})
+    rows = buffer.assets.find({**owner_query(_principal(tg)), "source": "trend_story"})
     return len([a for a in rows if _aware(a["created_at"]) > now - timedelta(hours=24)])
 
 
 def _user_hash(tg, text) -> int:
-    return int(hashlib.sha1(f"{tg}|{text}".encode("utf-8")).hexdigest()[:12], 16)
+    return int(hashlib.sha1(f"{_seed(tg)}|{text}".encode("utf-8")).hexdigest()[:12], 16)
 
 
 def _used_by_others_24h(buffer, tg, key, now) -> int:
     """How many OTHER users already got this trend in the last 24h (so friends don't all get the same one)."""
+    me = _principal(tg).owner_id
     rows = buffer.assets.find({"source": "trend_story", "trend_key": key})
-    return len([a for a in rows if str(a.get("telegram_id")) != str(tg)
-                and _aware(a["created_at"]) > now - timedelta(hours=24)])
+    count = 0
+    for a in rows:
+        owner = document_principal(a)
+        if (owner is None or owner.owner_id != me) and _aware(a["created_at"]) > now - timedelta(hours=24):
+            count += 1
+    return count
 
 
 def order_for_user(tg, items, buffer, cfg, now):
@@ -76,13 +94,14 @@ def order_for_user(tg, items, buffer, cfg, now):
 def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, service, now=None):
     """Queue one trend Story. Returns a dict describing it, or None if nothing qualified."""
     now = now or datetime.now(timezone.utc)
-    if posted_last_24h(buffer, tg, now) >= cfg.max_per_day:
+    principal = _principal(tg)
+    if posted_last_24h(buffer, principal, now) >= cfg.max_per_day:
         return None
-    ranked = order_for_user(tg, items, buffer, cfg, now)
-    variant = str(tg)                                 # per-user seed: different wording + design
+    ranked = order_for_user(principal, items, buffer, cfg, now)
+    variant = _seed(principal)                        # per-user seed: different wording + design
     for item in ranked:
         key = make_key("topic", item.get("title", ""))
-        if buffer.assets.find_one({"telegram_id": str(tg), "trend_key": key}):
+        if buffer.assets.find_one({**owner_query(principal), "trend_key": key}):
             continue                                  # this trend was already used
         if cfg.smart:
             built = build_story(item, ai=cfg.ai, brand=cfg.brand,
@@ -126,12 +145,17 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
         if cfg.smart:
             meta["verification"] = [x["step"] for x in built["steps"] if x["ok"]]
             meta["ai_source"] = built["plan"]["source"]
-        res = buffer.add_trend_story(tg, data, trend_key=key, title=item["title"], meta=meta)
+        res = buffer.add_trend_story(principal, data, trend_key=key, title=item["title"], meta=meta)
         if res["duplicate"]:
             continue
         asset = res["asset"]
         try:
-            job = service.enqueue(tg, [asset["_id"]], "story", scheduled_at=None, source="scheduled")
+            if principal.kind == "telegram":          # legacy entry point, unchanged
+                job = service.enqueue(principal.subject, [asset["_id"]], "story",
+                                      scheduled_at=None, source="scheduled")
+            else:
+                job = service.enqueue_for(principal, [asset["_id"]], "story",
+                                          scheduled_at=None, source="scheduled")
         except Exception as exc:                       # PublishError / NotConnected / ...
             logger.warning("Trend Story could not be queued: %s", exc)
             buffer.reject(asset["_id"], "trend_enqueue_failed")
