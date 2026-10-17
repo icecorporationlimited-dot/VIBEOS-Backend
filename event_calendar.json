@@ -1,0 +1,1745 @@
+{
+  "timezone_note": "Dates are ISO YYYY-MM-DD. Calendar covers 2026-10-17 through 2027-06-30. Lunar, regional, and informal observance dates may vary; verify locally before publishing or triggering campaigns.",
+  "date_range": {
+    "start": "2026-10-17",
+    "end": "2027-06-30"
+  },
+  "events": [
+    {
+      "key": "international_day_eradication_poverty",
+      "name": "International Day for the Eradication of Poverty",
+      "date": "2026-10-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "dussehra",
+      "name": "Dussehra / Vijayadashami",
+      "date": "2026-10-20",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 90
+    },
+    {
+      "key": "united_nations_day",
+      "name": "United Nations Day",
+      "date": "2026-10-24",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "valmiki_jayanti",
+      "name": "Maharishi Valmiki Jayanti",
+      "date": "2026-10-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "karwa_chauth",
+      "name": "Karwa Chauth",
+      "date": "2026-10-29",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "halloween",
+      "name": "Halloween",
+      "date": "2026-10-31",
+      "window_before_days": 3,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "world_vegan_day",
+      "name": "World Vegan Day",
+      "date": "2026-11-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_tsunami_awareness_day",
+      "name": "World Tsunami Awareness Day",
+      "date": "2026-11-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "dhanteras",
+      "name": "Dhanteras",
+      "date": "2026-11-06",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "chhoti_diwali",
+      "name": "Chhoti Diwali / Naraka Chaturdashi",
+      "date": "2026-11-07",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "diwali",
+      "name": "Diwali / Deepavali",
+      "date": "2026-11-08",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 95
+    },
+    {
+      "key": "govardhan_puja",
+      "name": "Govardhan Puja / Annakut",
+      "date": "2026-11-09",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "bhai_dooj",
+      "name": "Bhai Dooj",
+      "date": "2026-11-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "national_education_day",
+      "name": "National Education Day (India)",
+      "date": "2026-11-11",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "world_pneumonia_day",
+      "name": "World Pneumonia Day",
+      "date": "2026-11-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "childrens_day_india",
+      "name": "Children's Day (India)",
+      "date": "2026-11-14",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "world_diabetes_day",
+      "name": "World Diabetes Day",
+      "date": "2026-11-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "chhath_puja",
+      "name": "Chhath Puja",
+      "date": "2026-11-15",
+      "window_before_days": 2,
+      "window_after_days": 1,
+      "priority": 85
+    },
+    {
+      "key": "international_mens_day",
+      "name": "International Men's Day",
+      "date": "2026-11-19",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "world_toilet_day",
+      "name": "World Toilet Day",
+      "date": "2026-11-19",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_childrens_day",
+      "name": "World Children's Day",
+      "date": "2026-11-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "world_television_day",
+      "name": "World Television Day",
+      "date": "2026-11-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "violence_against_women_day",
+      "name": "International Day for the Elimination of Violence against Women",
+      "date": "2026-11-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "constitution_day",
+      "name": "Constitution Day (India)",
+      "date": "2026-11-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "st_andrews_day",
+      "name": "St Andrew's Day",
+      "date": "2026-11-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_aids_day",
+      "name": "World AIDS Day",
+      "date": "2026-12-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "abolition_slavery_day",
+      "name": "International Day for the Abolition of Slavery",
+      "date": "2026-12-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "national_pollution_control_day",
+      "name": "National Pollution Control Day (India)",
+      "date": "2026-12-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "disability_day",
+      "name": "International Day of Persons with Disabilities",
+      "date": "2026-12-03",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "indian_navy_day",
+      "name": "Indian Navy Day",
+      "date": "2026-12-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "international_volunteer_day",
+      "name": "International Volunteer Day",
+      "date": "2026-12-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "world_soil_day",
+      "name": "World Soil Day",
+      "date": "2026-12-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "armed_forces_flag_day",
+      "name": "Armed Forces Flag Day (India)",
+      "date": "2026-12-07",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "international_civil_aviation_day",
+      "name": "International Civil Aviation Day",
+      "date": "2026-12-07",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "anti_corruption_day",
+      "name": "International Anti-Corruption Day",
+      "date": "2026-12-09",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "human_rights_day",
+      "name": "Human Rights Day",
+      "date": "2026-12-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "international_mountain_day",
+      "name": "International Mountain Day",
+      "date": "2026-12-11",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "energy_conservation_day",
+      "name": "National Energy Conservation Day (India)",
+      "date": "2026-12-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "vijay_diwas",
+      "name": "Vijay Diwas (India)",
+      "date": "2026-12-16",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "international_migrants_day",
+      "name": "International Migrants Day",
+      "date": "2026-12-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "minorities_rights_day",
+      "name": "Minorities Rights Day (India)",
+      "date": "2026-12-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "goa_liberation_day",
+      "name": "Goa Liberation Day",
+      "date": "2026-12-19",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "human_solidarity_day",
+      "name": "International Human Solidarity Day",
+      "date": "2026-12-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "national_mathematics_day",
+      "name": "National Mathematics Day (India)",
+      "date": "2026-12-22",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "kisan_diwas",
+      "name": "Kisan Diwas / National Farmers' Day (India)",
+      "date": "2026-12-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "christmas_eve",
+      "name": "Christmas Eve",
+      "date": "2026-12-24",
+      "window_before_days": 2,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "christmas",
+      "name": "Christmas Day",
+      "date": "2026-12-25",
+      "window_before_days": 2,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "good_governance_day",
+      "name": "Good Governance Day (India)",
+      "date": "2026-12-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "veer_baal_diwas",
+      "name": "Veer Bal Diwas (India)",
+      "date": "2026-12-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "new_years_eve",
+      "name": "New Year's Eve",
+      "date": "2026-12-31",
+      "window_before_days": 3,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "global_family_day",
+      "name": "Global Family Day",
+      "date": "2027-01-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "new_year",
+      "name": "New Year's Day",
+      "date": "2027-01-01",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "world_braille_day",
+      "name": "World Braille Day",
+      "date": "2027-01-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "pravasi_bharatiya_divas",
+      "name": "Pravasi Bharatiya Divas",
+      "date": "2027-01-09",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_hindi_day",
+      "name": "World Hindi Day",
+      "date": "2027-01-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "national_youth_day",
+      "name": "National Youth Day (India)",
+      "date": "2027-01-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "lohri",
+      "name": "Lohri",
+      "date": "2027-01-13",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "makar_sankranti",
+      "name": "Makar Sankranti",
+      "date": "2027-01-14",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "pongal",
+      "name": "Pongal",
+      "date": "2027-01-15",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "world_religion_day",
+      "name": "World Religion Day",
+      "date": "2027-01-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "international_day_education",
+      "name": "International Day of Education",
+      "date": "2027-01-24",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "national_girl_child_day",
+      "name": "National Girl Child Day (India)",
+      "date": "2027-01-24",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "national_tourism_day",
+      "name": "National Tourism Day (India)",
+      "date": "2027-01-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "national_voters_day",
+      "name": "National Voters' Day (India)",
+      "date": "2027-01-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "international_clean_energy_day",
+      "name": "International Day of Clean Energy",
+      "date": "2027-01-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "republic_day",
+      "name": "Republic Day (India)",
+      "date": "2027-01-26",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 90
+    },
+    {
+      "key": "holocaust_remembrance_day",
+      "name": "International Holocaust Remembrance Day",
+      "date": "2027-01-27",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "data_privacy_day",
+      "name": "Data Privacy Day / Data Protection Day",
+      "date": "2027-01-28",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "martyrs_day",
+      "name": "Martyrs' Day (India)",
+      "date": "2027-01-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "world_ntd_day",
+      "name": "World Neglected Tropical Diseases Day",
+      "date": "2027-01-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_interfaith_harmony_week",
+      "name": "World Interfaith Harmony Week",
+      "date": "2027-02-01",
+      "window_before_days": 0,
+      "window_after_days": 6,
+      "priority": 40
+    },
+    {
+      "key": "world_wetlands_day",
+      "name": "World Wetlands Day",
+      "date": "2027-02-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "human_fraternity_day",
+      "name": "International Day of Human Fraternity",
+      "date": "2027-02-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_cancer_day",
+      "name": "World Cancer Day",
+      "date": "2027-02-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "lunar_new_year",
+      "name": "Lunar New Year",
+      "date": "2027-02-06",
+      "window_before_days": 2,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "zero_tolerance_fgm_day",
+      "name": "International Day of Zero Tolerance for Female Genital Mutilation",
+      "date": "2027-02-06",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_pulses_day",
+      "name": "World Pulses Day",
+      "date": "2027-02-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "vasant_panchami",
+      "name": "Vasant Panchami / Saraswati Puja",
+      "date": "2027-02-11",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "women_girls_science_day",
+      "name": "International Day of Women and Girls in Science",
+      "date": "2027-02-11",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "darwin_day",
+      "name": "Darwin Day",
+      "date": "2027-02-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_radio_day",
+      "name": "World Radio Day",
+      "date": "2027-02-13",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "valentines_day",
+      "name": "Valentine's Day",
+      "date": "2027-02-14",
+      "window_before_days": 7,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "random_acts_kindness_day",
+      "name": "Random Acts of Kindness Day",
+      "date": "2027-02-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "guru_ravidas_jayanti",
+      "name": "Guru Ravidas Jayanti",
+      "date": "2027-02-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "world_social_justice_day",
+      "name": "World Day of Social Justice",
+      "date": "2027-02-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "mother_language_day",
+      "name": "International Mother Language Day",
+      "date": "2027-02-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "national_science_day",
+      "name": "National Science Day (India)",
+      "date": "2027-02-28",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "rare_disease_day",
+      "name": "Rare Disease Day",
+      "date": "2027-02-28",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "zero_discrimination_day",
+      "name": "Zero Discrimination Day",
+      "date": "2027-03-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "dayanand_saraswati_jayanti",
+      "name": "Maharishi Dayanand Saraswati Jayanti",
+      "date": "2027-03-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "world_hearing_day",
+      "name": "World Hearing Day",
+      "date": "2027-03-03",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_wildlife_day",
+      "name": "World Wildlife Day",
+      "date": "2027-03-03",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_obesity_day",
+      "name": "World Obesity Day",
+      "date": "2027-03-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "maha_shivratri",
+      "name": "Maha Shivratri",
+      "date": "2027-03-06",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "international_womens_day",
+      "name": "International Women's Day",
+      "date": "2027-03-08",
+      "window_before_days": 3,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "eid_ul_fitr",
+      "name": "Eid ul-Fitr / Ramzan Eid (tentative)",
+      "date": "2027-03-10",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "international_day_mathematics",
+      "name": "International Day of Mathematics",
+      "date": "2027-03-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "pi_day",
+      "name": "Pi Day",
+      "date": "2027-03-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "consumer_rights_day",
+      "name": "World Consumer Rights Day",
+      "date": "2027-03-15",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "st_patricks_day",
+      "name": "St Patrick's Day",
+      "date": "2027-03-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "happiness_day",
+      "name": "International Day of Happiness",
+      "date": "2027-03-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "nowruz",
+      "name": "Nowruz / Persian New Year",
+      "date": "2027-03-20",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "world_sparrow_day",
+      "name": "World Sparrow Day",
+      "date": "2027-03-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "down_syndrome_day",
+      "name": "World Down Syndrome Day",
+      "date": "2027-03-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "holika_dahan",
+      "name": "Holika Dahan",
+      "date": "2027-03-21",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "international_day_forests",
+      "name": "International Day of Forests",
+      "date": "2027-03-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "racial_discrimination_day",
+      "name": "International Day for the Elimination of Racial Discrimination",
+      "date": "2027-03-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_poetry_day",
+      "name": "World Poetry Day",
+      "date": "2027-03-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "holi",
+      "name": "Holi / Dhulandi",
+      "date": "2027-03-22",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 95
+    },
+    {
+      "key": "world_water_day",
+      "name": "World Water Day",
+      "date": "2027-03-22",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "shaheed_diwas",
+      "name": "Shaheed Diwas (India)",
+      "date": "2027-03-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "world_meteorological_day",
+      "name": "World Meteorological Day",
+      "date": "2027-03-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_tb_day",
+      "name": "World Tuberculosis Day",
+      "date": "2027-03-24",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "good_friday",
+      "name": "Good Friday",
+      "date": "2027-03-26",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "earth_hour",
+      "name": "Earth Hour (expected last Saturday of March)",
+      "date": "2027-03-27",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_theatre_day",
+      "name": "World Theatre Day",
+      "date": "2027-03-27",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "easter_sunday",
+      "name": "Easter Sunday",
+      "date": "2027-03-28",
+      "window_before_days": 3,
+      "window_after_days": 0,
+      "priority": 80
+    },
+    {
+      "key": "rajasthan_day",
+      "name": "Rajasthan Day",
+      "date": "2027-03-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "april_fools_day",
+      "name": "April Fools' Day",
+      "date": "2027-04-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "utkal_dibasa",
+      "name": "Odisha Foundation Day / Utkala Dibasa",
+      "date": "2027-04-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "autism_awareness_day",
+      "name": "World Autism Awareness Day",
+      "date": "2027-04-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "mine_awareness_day",
+      "name": "International Mine Awareness Day",
+      "date": "2027-04-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "international_day_conscience",
+      "name": "International Day of Conscience",
+      "date": "2027-04-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "national_maritime_day",
+      "name": "National Maritime Day (India)",
+      "date": "2027-04-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "sport_development_peace_day",
+      "name": "International Day of Sport for Development and Peace",
+      "date": "2027-04-06",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "chaitra_navratri",
+      "name": "Chaitra Navratri begins",
+      "date": "2027-04-07",
+      "window_before_days": 1,
+      "window_after_days": 8,
+      "priority": 75
+    },
+    {
+      "key": "gudi_padwa",
+      "name": "Gudi Padwa",
+      "date": "2027-04-07",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "ugadi",
+      "name": "Ugadi",
+      "date": "2027-04-07",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "cheti_chand",
+      "name": "Cheti Chand / Jhulelal Jayanti",
+      "date": "2027-04-08",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "world_homeopathy_day",
+      "name": "World Homeopathy Day",
+      "date": "2027-04-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 35
+    },
+    {
+      "key": "national_safe_motherhood_day",
+      "name": "National Safe Motherhood Day (India)",
+      "date": "2027-04-11",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "human_space_flight_day",
+      "name": "International Day of Human Space Flight",
+      "date": "2027-04-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "jallianwala_bagh_remembrance",
+      "name": "Jallianwala Bagh Remembrance Day",
+      "date": "2027-04-13",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "ambedkar_jayanti",
+      "name": "Dr. B.R. Ambedkar Jayanti",
+      "date": "2027-04-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "baisakhi",
+      "name": "Baisakhi / Vaisakhi",
+      "date": "2027-04-14",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "tamil_new_year",
+      "name": "Tamil New Year",
+      "date": "2027-04-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "vishu",
+      "name": "Vishu",
+      "date": "2027-04-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "ram_navami",
+      "name": "Ram Navami",
+      "date": "2027-04-15",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "world_art_day",
+      "name": "World Art Day",
+      "date": "2027-04-15",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_haemophilia_day",
+      "name": "World Haemophilia Day",
+      "date": "2027-04-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_heritage_day",
+      "name": "World Heritage Day",
+      "date": "2027-04-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "mahavir_jayanti",
+      "name": "Mahavir Jayanti",
+      "date": "2027-04-19",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "civil_services_day",
+      "name": "Civil Services Day (India)",
+      "date": "2027-04-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "creativity_innovation_day",
+      "name": "World Creativity and Innovation Day",
+      "date": "2027-04-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "earth_day",
+      "name": "Earth Day",
+      "date": "2027-04-22",
+      "window_before_days": 2,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "english_language_day",
+      "name": "English Language Day",
+      "date": "2027-04-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "spanish_language_day",
+      "name": "World Spanish Language Day",
+      "date": "2027-04-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_book_day",
+      "name": "World Book and Copyright Day",
+      "date": "2027-04-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "panchayati_raj_day",
+      "name": "National Panchayati Raj Day (India)",
+      "date": "2027-04-24",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "world_malaria_day",
+      "name": "World Malaria Day",
+      "date": "2027-04-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_ip_day",
+      "name": "World Intellectual Property Day",
+      "date": "2027-04-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "work_safety_health_day",
+      "name": "World Day for Safety and Health at Work",
+      "date": "2027-04-28",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "international_dance_day",
+      "name": "International Dance Day",
+      "date": "2027-04-29",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "international_jazz_day",
+      "name": "International Jazz Day",
+      "date": "2027-04-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "gujarat_day",
+      "name": "Gujarat Day",
+      "date": "2027-05-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "labour_day",
+      "name": "International Workers' Day / Labour Day",
+      "date": "2027-05-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "maharashtra_day",
+      "name": "Maharashtra Day",
+      "date": "2027-05-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_laughter_day",
+      "name": "World Laughter Day (first Sunday of May)",
+      "date": "2027-05-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_tuna_day",
+      "name": "World Tuna Day",
+      "date": "2027-05-02",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 35
+    },
+    {
+      "key": "press_freedom_day",
+      "name": "World Press Freedom Day",
+      "date": "2027-05-03",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "firefighters_day",
+      "name": "International Firefighters' Day",
+      "date": "2027-05-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_hand_hygiene_day",
+      "name": "World Hand Hygiene Day",
+      "date": "2027-05-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_portuguese_language_day",
+      "name": "World Portuguese Language Day",
+      "date": "2027-05-05",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 35
+    },
+    {
+      "key": "tagore_jayanti",
+      "name": "Rabindranath Tagore Jayanti (Gregorian date)",
+      "date": "2027-05-07",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "red_cross_day",
+      "name": "World Red Cross and Red Crescent Day",
+      "date": "2027-05-08",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "thalassaemia_day",
+      "name": "World Thalassaemia Day",
+      "date": "2027-05-08",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "mothers_day",
+      "name": "Mother's Day",
+      "date": "2027-05-09",
+      "window_before_days": 5,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "world_lupus_day",
+      "name": "World Lupus Day",
+      "date": "2027-05-10",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 35
+    },
+    {
+      "key": "national_technology_day",
+      "name": "National Technology Day (India)",
+      "date": "2027-05-11",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "international_nurses_day",
+      "name": "International Nurses Day",
+      "date": "2027-05-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "international_day_families",
+      "name": "International Day of Families",
+      "date": "2027-05-15",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "international_day_light",
+      "name": "International Day of Light",
+      "date": "2027-05-16",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "living_together_peace_day",
+      "name": "International Day of Living Together in Peace",
+      "date": "2027-05-16",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "eid_ul_adha",
+      "name": "Eid ul-Adha / Bakrid (tentative)",
+      "date": "2027-05-17",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "museum_day",
+      "name": "International Museum Day",
+      "date": "2027-05-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "buddha_purnima",
+      "name": "Buddha Purnima / Vesak",
+      "date": "2027-05-20",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 75
+    },
+    {
+      "key": "world_bee_day",
+      "name": "World Bee Day",
+      "date": "2027-05-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "anti_terrorism_day",
+      "name": "Anti-Terrorism Day (India)",
+      "date": "2027-05-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "cultural_diversity_day",
+      "name": "World Day for Cultural Diversity",
+      "date": "2027-05-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "international_tea_day",
+      "name": "International Tea Day",
+      "date": "2027-05-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "biodiversity_day",
+      "name": "International Day for Biological Diversity",
+      "date": "2027-05-22",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "world_turtle_day",
+      "name": "World Turtle Day",
+      "date": "2027-05-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "geek_pride_day",
+      "name": "Geek Pride Day (informal)",
+      "date": "2027-05-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "menstrual_hygiene_day",
+      "name": "World Menstrual Hygiene Day",
+      "date": "2027-05-28",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "un_peacekeepers_day",
+      "name": "International Day of UN Peacekeepers",
+      "date": "2027-05-29",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "goa_statehood_day",
+      "name": "Goa Statehood Day",
+      "date": "2027-05-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_no_tobacco_day",
+      "name": "World No Tobacco Day",
+      "date": "2027-05-31",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "global_day_parents",
+      "name": "Global Day of Parents",
+      "date": "2027-06-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_milk_day",
+      "name": "World Milk Day",
+      "date": "2027-06-01",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_bicycle_day",
+      "name": "World Bicycle Day",
+      "date": "2027-06-03",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "children_aggression_day",
+      "name": "International Day of Innocent Children Victims of Aggression",
+      "date": "2027-06-04",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_environment_day",
+      "name": "World Environment Day",
+      "date": "2027-06-05",
+      "window_before_days": 2,
+      "window_after_days": 0,
+      "priority": 70
+    },
+    {
+      "key": "islamic_new_year",
+      "name": "Islamic New Year / Muharram begins (tentative)",
+      "date": "2027-06-06",
+      "window_before_days": 1,
+      "window_after_days": 1,
+      "priority": 75
+    },
+    {
+      "key": "world_food_safety_day",
+      "name": "World Food Safety Day",
+      "date": "2027-06-07",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "world_oceans_day",
+      "name": "World Oceans Day",
+      "date": "2027-06-08",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "world_day_against_child_labour",
+      "name": "World Day Against Child Labour",
+      "date": "2027-06-12",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "albinism_awareness_day",
+      "name": "International Albinism Awareness Day",
+      "date": "2027-06-13",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_blood_donor_day",
+      "name": "World Blood Donor Day",
+      "date": "2027-06-14",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "ashura",
+      "name": "Ashura / Muharram observance (tentative)",
+      "date": "2027-06-15",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "world_elder_abuse_awareness_day",
+      "name": "World Elder Abuse Awareness Day",
+      "date": "2027-06-15",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "desertification_drought_day",
+      "name": "World Day to Combat Desertification and Drought",
+      "date": "2027-06-17",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "international_sushi_day",
+      "name": "International Sushi Day (informal)",
+      "date": "2027-06-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 35
+    },
+    {
+      "key": "kabir_jayanti",
+      "name": "Sant Kabir Jayanti",
+      "date": "2027-06-18",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "fathers_day",
+      "name": "Father's Day",
+      "date": "2027-06-20",
+      "window_before_days": 5,
+      "window_after_days": 0,
+      "priority": 85
+    },
+    {
+      "key": "world_refugee_day",
+      "name": "World Refugee Day",
+      "date": "2027-06-20",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "international_yoga_day",
+      "name": "International Day of Yoga",
+      "date": "2027-06-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 60
+    },
+    {
+      "key": "june_solstice",
+      "name": "June Solstice",
+      "date": "2027-06-21",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "world_music_day",
+      "name": "World Music Day / Fête de la Musique",
+      "date": "2027-06-21",
+      "window_before_days": 1,
+      "window_after_days": 0,
+      "priority": 65
+    },
+    {
+      "key": "olympic_day",
+      "name": "International Olympic Day",
+      "date": "2027-06-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 50
+    },
+    {
+      "key": "un_public_service_day",
+      "name": "United Nations Public Service Day",
+      "date": "2027-06-23",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "day_of_seafarer",
+      "name": "Day of the Seafarer",
+      "date": "2027-06-25",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "drug_abuse_day",
+      "name": "International Day Against Drug Abuse and Illicit Trafficking",
+      "date": "2027-06-26",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "msme_day",
+      "name": "Micro-, Small and Medium-sized Enterprises Day",
+      "date": "2027-06-27",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "international_day_tropics",
+      "name": "International Day of the Tropics",
+      "date": "2027-06-29",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    },
+    {
+      "key": "national_statistics_day",
+      "name": "National Statistics Day (India)",
+      "date": "2027-06-29",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 55
+    },
+    {
+      "key": "asteroid_day",
+      "name": "International Asteroid Day",
+      "date": "2027-06-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 45
+    },
+    {
+      "key": "parliamentarism_day",
+      "name": "International Day of Parliamentarism",
+      "date": "2027-06-30",
+      "window_before_days": 0,
+      "window_after_days": 0,
+      "priority": 40
+    }
+  ]
+}
