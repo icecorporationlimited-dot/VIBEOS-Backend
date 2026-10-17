@@ -38,6 +38,10 @@ PUBLISHING_SIGNING_SECRET = _env("PUBLISHING_SIGNING_SECRET")
 # Fernet key. Never change it after users connect Instagram.
 TOKEN_ENCRYPTION_KEY = _env("TOKEN_ENCRYPTION_KEY")
 
+# Web dashboard publishing. OFF by default: set WEB_PUBLISHING=1 on Render only after
+# you tested with your own account (see docs/WEB_PUBLISHING_PART_C.md).
+WEB_PUBLISHING = _env("WEB_PUBLISHING")
+
 # ---------------- Optional ----------------
 # Render injects PORT (default 10000); the web server binds to it.
 PORT = int(_env("PORT", "8000"))
