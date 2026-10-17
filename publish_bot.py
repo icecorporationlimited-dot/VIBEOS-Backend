@@ -27,7 +27,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler
 from publishing import autopilot as autopilot_mod
 from publishing.accounts import AccountStore
 from publishing.autopilot import AutopilotStore
-from publishing.policy import PolicyEngine, get_zone
+from publishing.policy import PolicyEngine, get_zone, make_tz_for
 from publishing.scheduler import Worker
 from publishing.slots import Calendar
 from publishing.config import load_config, missing_settings
@@ -100,9 +100,10 @@ def build_runtime(db, content_buffer, bot_token):
 
     # ---- Phase 3: policy, calendar, worker ----
     import memory   # shared Mongo handle + per-user timezone
-    tz_for = lambda tg: memory.get_preferences(tg)["timezone"]
     autopilot = AutopilotStore(db["autopilot"])
     autopilot.ensure_indexes()
+    # Telegram users keep their saved zone; web owners use their autopilot timezone.
+    tz_for = make_tz_for(autopilot, lambda tg: memory.get_preferences(tg)["timezone"])
     service.gate = PolicyEngine(db["publish_jobs"], content_buffer, autopilot, tz_for)
     calendar = Calendar(db["publish_jobs"], autopilot, tz_for)
     from content_planner import ContentPlanner
@@ -137,11 +138,17 @@ def build_runtime(db, content_buffer, bot_token):
         brand=getattr(app_settings, "TREND_BRAND", "VIBEOS"),
         show_headline=getattr(app_settings, "TREND_SHOW_HEADLINE", True))
     engagement_events = db["engagement_events"]
+    # Web publishing is opt-in (WEB_PUBLISHING=1). Until then web-owned jobs are
+    # never claimed, exactly as before.
+    web_publishing = str(getattr(app_settings, "WEB_PUBLISHING", "")).strip().lower() in (
+        "1", "true", "yes", "on")
+    if web_publishing:
+        logger.warning("Web publishing is ENABLED: the worker will post for web-owned accounts.")
     worker = Worker(service, accounts, autopilot, calendar, content_buffer,
                     notify=lambda tg, text: send_telegram(bot_token, tg, text),
                     refresh_days=cfg.refresh_before_days, planner=planner,
                     trend_cfg=trend_cfg, engagement_ai=engagement_ai,
-                    engagement_events=engagement_events)
+                    engagement_events=engagement_events, web_owners=web_publishing)
 
     web_login = None
     web_auth_cfg = load_web_auth_settings()
