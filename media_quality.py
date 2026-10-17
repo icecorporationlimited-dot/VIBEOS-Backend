@@ -13,8 +13,6 @@ import io
 import numpy as np
 from PIL import Image, ImageOps
 
-import photo_intel
-
 ANALYSIS_SIDE = 512          # all measurements are done at this size
 MIN_SHORT_SIDE = 720         # soft ranking hint, not an automatic rejection
 BLUR_THRESHOLD = 40.0        # soft-focus hint, not an automatic rejection
@@ -24,15 +22,8 @@ LOW_CONTRAST_STD = 28.0
 DUPLICATE_DISTANCE = 6       # dHash hamming distance <= this -> duplicate
 SIMILAR_DISTANCE = 12        # <= this -> too similar to shortlist twice
 
-# Reject only files that can never be posted: undecodable, or (new) extreme junk that the
-# deep analyzer is certain about - screenshots, thumbnails under 320px, all-black/white
-# frames. Every other quality problem is just a ranking hint. Set VIBEOS_STRICT_JUNK=0
-# to go back to rejecting only undecodable files.
-HARD_ISSUES = {"unreadable", "screenshot", "tiny", "blank_frame"}
-
-# Share of the final quality_score that comes from the deep analyzer (the rest is the
-# original quick check). The scale stays 0-100 so every existing consumer keeps working.
-DEEP_WEIGHT = 0.7
+# Reject only files that cannot be decoded. Other quality problems are ranking hints.
+HARD_ISSUES = {"unreadable"}
 
 _LUMA = np.array([0.299, 0.587, 0.114], dtype=np.float32)
 
@@ -101,8 +92,8 @@ def analyze_image(image_bytes) -> dict:
             "width": 0, "height": 0, "orientation": "unknown", "aspect": 0,
             "sharpness": 0, "brightness": 0, "contrast": 0,
             "clipped_shadows": 0, "clipped_highlights": 0,
-            "dhash": None, "phash": None, "quality_score": 0,
-            "issues": ["unreadable"], "notes": [], "deep": None,
+            "dhash": None, "quality_score": 0,
+            "issues": ["unreadable"], "notes": [],
         }
 
     width, height = img.size
@@ -159,22 +150,6 @@ def analyze_image(image_bytes) -> dict:
     penalty = technical_penalty + presentation_penalty
     quality = int(round(_clamp((s_sharp + s_expo + s_contrast + s_res - penalty) / 100.0) * 100))
 
-    # ---- deep analysis (faces, subject focus, noise, framing, burst/dup signatures)
-    deep = photo_intel.deep_analyze(img)
-    if deep:
-        quality = int(round((1 - DEEP_WEIGHT) * quality + DEEP_WEIGHT * deep["local_score"]))
-        extra_notes = {"motion_blur": "motion_blur", "noisy": "noisy",
-                       "eyes_closed": "eyes_closed_suspected",
-                       "subject_cut_off": "face_cut_off",
-                       "screenshot_or_screen_photo": "possible_screenshot",
-                       "cluttered_background": "busy_background"}
-        for flag in deep["flags"]:
-            note = extra_notes.get(flag)
-            if note and note not in notes:
-                notes.append(note)
-        if photo_intel.strict_junk_enabled():
-            issues.extend(j for j in deep["junk"] if j not in issues)
-
     return {
         "width": width,
         "height": height,
@@ -186,11 +161,9 @@ def analyze_image(image_bytes) -> dict:
         "clipped_shadows": round(clipped_shadows, 3),
         "clipped_highlights": round(clipped_highlights, 3),
         "dhash": dhash(img),
-        "phash": deep["phash"] if deep else None,
         "quality_score": quality,
         "issues": issues,
         "notes": notes,
-        "deep": deep,
     }
 
 

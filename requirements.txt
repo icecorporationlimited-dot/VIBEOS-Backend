@@ -12,4 +12,3 @@ fastapi
 uvicorn
 httpx
 python-multipart
-opencv-python-headless
