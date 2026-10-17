@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: vibeos
+    runtime: docker
+    plan: starter            # free plan sleeps after 15 min; starter stays 24/7
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY   # Fernet key (see RENDER_DEPLOY.md)
+        sync: false
+      - key: PUBLISHING_SIGNING_SECRET
+        generateValue: true
+      - key: VISION_MODEL
+        value: qwen/qwen3.8-27b
+      - key: WEB_PUBLISHING      # 1 = post for web dashboard users (test with your own account first)
+        value: "0"
