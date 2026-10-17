@@ -12,9 +12,15 @@ from pathlib import Path
 
 from event_calendar import find_event
 from event_detector import classify_image
-from publishing.policy import get_zone
+from publishing.identity import Principal, owner_filter
+from publishing.policy import get_zone, resolve_tz
 
 logger = logging.getLogger(__name__)
+
+
+def _principal(user):
+    """Planner callers may pass a Principal (web or Telegram) or a plain Telegram ID."""
+    return user if isinstance(user, Principal) else Principal.from_telegram(user)
 
 
 class ContentPlanner:
@@ -42,8 +48,9 @@ class ContentPlanner:
                       "confidence": 0.0, "visual_summary": "", "suggested_caption_angle": "",
                       "error": str(exc)[:240]}
         result["checked_at"] = datetime.now(timezone.utc)
+        # Owner-scoped write: a cached detection can only land on this owner's asset.
         self.buffer.assets.update_one(
-            {"_id": asset["_id"], "telegram_id": str(telegram_id)},
+            {"$and": [{"_id": asset["_id"]}, owner_filter(_principal(telegram_id))]},
             {"$set": {"event_detection": result}},
         )
         return result
@@ -51,7 +58,7 @@ class ContentPlanner:
     def schedule_for(self, telegram_id, asset: dict):
         """Return (UTC datetime or None, metadata). None means use normal slots."""
         detection = self.classify_asset(telegram_id, asset)
-        tz = get_zone(self.tz_for(telegram_id))
+        tz = get_zone(resolve_tz(self.tz_for, _principal(telegram_id)))
         now_local = datetime.now(timezone.utc).astimezone(tz)
 
         # A clearly printed date on a poster/invitation takes precedence over
