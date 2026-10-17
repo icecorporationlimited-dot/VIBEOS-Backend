@@ -515,6 +515,42 @@ class Worker:
         fields["companion"] = True
         self.service.jobs.update_one({"_id": job["_id"]}, {"$set": fields})
 
+    def _occasion_fill(self, tg, ready, settings):
+        """Near a big occasion with no matching photo: greet with the best-fitting ready photo.
+
+        Returns the asset id that was scheduled (or None). One greeting per pass.
+        """
+        planner = self.planner
+        if planner is None or not hasattr(planner, "occasion_fill"):
+            return None
+        taken = {(j.get("event_key"), str(j.get("event_date")))
+                 for j in self.service.jobs_for(tg, 300)
+                 if j.get("event_key") and j.get("status") not in (svc.FAILED, svc.CANCELLED)}
+        plan = planner.occasion_fill(tg, ready, taken)
+        if not plan:
+            return None
+        asset, occ = plan["asset"], plan["occasion"]
+        route = {"format": "photo", "asset_ids": [asset["_id"]], "group_id": None,
+                 "decision": {"format": "photo", "content_source": "occasion_greeting",
+                              "event_key": occ.key, "confidence": plan["fit"],
+                              "reason": "Occasion greeting; no matching photo was uploaded."}}
+        planner.occasion_caption(tg, asset, occ, plan["phase"])   # soft-fails to the old caption
+        self._store_route(route)
+        try:
+            job = self.service.enqueue_for(tg, route["asset_ids"], "photo",
+                                           scheduled_at=plan["slot"], source="scheduled")
+        except (PublishError, NotConnected):
+            self._clear_route(route)
+            return None
+        if job.get("duplicate"):
+            return None
+        extra = {"route": route["decision"], "planning": plan["meta"],
+                 "event_key": occ.key, "event_date": occ.date.isoformat()}
+        self.service.jobs.update_one({"_id": job["_id"]}, {"$set": extra})
+        if "story" in settings["formats"]:
+            self._story_companion(tg, asset["_id"], plan["slot"], extra)
+        return asset["_id"]
+
     def _autofill(self):
         for tg in self._principals():
             settings = self.autopilot.get(tg)
@@ -536,6 +572,17 @@ class Worker:
                      and a.get("batch_id") not in held]
             if not ready:
                 continue
+            if "photo" in settings["formats"]:
+                try:
+                    used = self._occasion_fill(tg, ready, settings)
+                except Exception:
+                    logger.exception("Occasion fill failed")
+                    used = None
+                if used is not None:
+                    room -= 1
+                    ready = [a for a in ready if a["_id"] != used]
+                    if room <= 0 or not ready:
+                        continue
             reels_on = "reel" in settings["formats"] and self._reels_ready(tg)
             routes = plan_routes(ready, self._detections(tg, [a for a in ready
                                                               if a.get("kind", "photo") == "photo"

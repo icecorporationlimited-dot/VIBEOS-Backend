@@ -54,10 +54,11 @@
   function navigate(view) {
     document.querySelectorAll('.view').forEach(e => e.classList.toggle('active', e.id === 'view-' + view));
     document.querySelectorAll('[data-view]').forEach(e => e.classList.toggle('active', e.classList.contains('nav-item') && e.dataset.view === view));
-    const names = {dashboard:'Overview', media:'Media library', notifications:'Activity', settings:'Settings'};
+    const names = {dashboard:'Overview', media:'Media library', occasions:'Occasions', notifications:'Activity', settings:'Settings'};
     $('crumbTitle').textContent = names[view] || 'Overview';
     $('sidebar').classList.remove('open');
     window.location.hash = view;
+    if (view === 'occasions') loadOccasions();
   }
   document.querySelectorAll('[data-view]').forEach(e => e.addEventListener('click', () => navigate(e.dataset.view)));
   $('mobileMenu').addEventListener('click', () => $('sidebar').classList.toggle('open'));
@@ -285,6 +286,74 @@
     saveAutopilot(body, 'Autopilot settings saved');
   });
 
+  // ---------------------------------------------------------------- occasions
+  let occ = null;
+  const OCC_CATS = {festival: 'Festivals', national: 'National days', social: 'Social days', seasonal: 'Seasonal', awareness: 'Awareness days'};
+  const OCC_STATE = {
+    planned: ['Planned', 'chip-ready'],
+    auto_greeting: ['Will greet with your best photo', 'chip-processing'],
+    quiet: ['Quiet day, no greeting', 'chip-waiting'],
+    watching: ['Waits for a matching photo', 'chip-waiting']
+  };
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function occWhen(days) { return days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'in ' + days + ' days'; }
+  function renderOccasions() {
+    if (!occ) return;
+    if (!occ.available) { $('occList').innerHTML = '<div class="empty-state"><strong>Not available yet</strong><p>The context engine is not switched on for this server.</p></div>'; return; }
+    const p = occ.prefs;
+    $('occEnabled').checked = !!p.enabled;
+    $('occGreeting').checked = !!p.auto_greeting;
+    $('occPriority').value = p.min_priority >= 85 ? '85' : p.min_priority >= 70 ? '70' : '50';
+    $('occSolemn').value = p.solemn;
+    $('occCats').innerHTML = Object.keys(OCC_CATS).map(k =>
+      '<label class="occ-cat"><input type="checkbox" data-cat="' + k + '"' + (p.categories.includes(k) ? ' checked' : '') + '> ' + OCC_CATS[k] + '</label>').join('');
+    $('occCats').querySelectorAll('[data-cat]').forEach(b => b.addEventListener('change', () => {
+      const cats = Array.from($('occCats').querySelectorAll('[data-cat]')).filter(x => x.checked).map(x => x.dataset.cat);
+      saveOccasions({categories: cats});
+    }));
+    const cal = occ.calendar || {};
+    $('occCalendarWarn').hidden = cal.ok !== false;
+    if (cal.ok === false) $('occCalendarWarnText').textContent = cal.covered_until
+      ? 'Lunar festival dates (Diwali, Holi, Eid) are covered until ' + cal.covered_until + '. Ask the admin to extend event_calendar.json.'
+      : 'No lunar festival dates are loaded. Fixed-date days still work.';
+    $('occList').innerHTML = occ.occasions.length ? occ.occasions.map(o => {
+      const s = OCC_STATE[o.state] || OCC_STATE.watching;
+      let d = o.date;
+      try { d = new Date(o.date + 'T00:00:00').toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'}); } catch (_) {}
+      return '<div class="occ-row"><div class="occ-date"><strong>' + escapeHTML(d) + '</strong><small>' + occWhen(o.days_left) + '</small></div>' +
+        '<div class="occ-main"><strong>' + escapeHTML(o.name) + '</strong><small>' + escapeHTML(o.category) + ' · ' + escapeHTML(o.tone) + ' tone</small></div>' +
+        '<span class="draft-chip ' + s[1] + '">' + escapeHTML(s[0]) + '</span></div>';
+    }).join('') : '<div class="empty-state"><strong>Nothing coming up</strong><p>No occasions match your rules in the next 45 days.</p></div>';
+    $('occPersonal').innerHTML = p.personal.length ? p.personal.map((x, i) =>
+      '<div class="occ-row"><div class="occ-main"><strong>' + escapeHTML(x.name) + '</strong><small>' + MONTHS[x.month - 1] + ' ' + x.day + ', every year</small></div>' +
+      '<button class="mini-action delete" data-occdel="' + i + '">Remove</button></div>').join('') : '';
+    $('occPersonal').querySelectorAll('[data-occdel]').forEach(b => b.addEventListener('click', () =>
+      saveOccasions({personal: p.personal.filter((_, i) => i !== Number(b.dataset.occdel))})));
+  }
+  async function loadOccasions() {
+    if (!me.signed_in) return;
+    try { occ = await call('/web/api/occasions'); renderOccasions(); }
+    catch (err) { toast(err.message); }
+  }
+  async function saveOccasions(body) {
+    if (!requireLogin()) { renderOccasions(); return; }
+    try { occ = await postJSON('/web/api/occasions', body); renderOccasions(); toast('Occasion rules saved'); }
+    catch (err) { toast(err.message); renderOccasions(); }
+  }
+  $('occEnabled').addEventListener('change', e => saveOccasions({enabled: e.target.checked}));
+  $('occGreeting').addEventListener('change', e => saveOccasions({auto_greeting: e.target.checked}));
+  $('occPriority').addEventListener('change', e => saveOccasions({min_priority: Number(e.target.value)}));
+  $('occSolemn').addEventListener('change', e => saveOccasions({solemn: e.target.value}));
+  $('occMonth').innerHTML = MONTHS.map((m, i) => '<option value="' + (i + 1) + '">' + m + '</option>').join('');
+  $('occDay').innerHTML = Array.from({length: 31}, (_, i) => '<option value="' + (i + 1) + '">' + (i + 1) + '</option>').join('');
+  $('occAdd').addEventListener('click', () => {
+    const name = $('occName').value.trim();
+    if (!name) { toast('Give it a name first.'); return; }
+    const list = ((occ && occ.prefs && occ.prefs.personal) || []).concat([{name, month: Number($('occMonth').value), day: Number($('occDay').value)}]);
+    $('occName').value = '';
+    saveOccasions({personal: list});
+  });
+
   // ------------------------------------------------------------------- events
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));
   $('mediaSort').addEventListener('change', renderMedia);
@@ -300,7 +369,7 @@
     await loadMe();
     await loadState();
     const hash = (location.hash || '#dashboard').slice(1);
-    if (['dashboard', 'media', 'notifications', 'settings'].includes(hash)) navigate(hash);
+    if (['dashboard', 'media', 'occasions', 'notifications', 'settings'].includes(hash)) navigate(hash);
   }
   boot();
 })();

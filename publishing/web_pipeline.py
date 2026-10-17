@@ -18,6 +18,7 @@ import threading
 from datetime import datetime, timezone
 
 import copywriter
+import photo_judge
 from content_buffer import ANALYZED, READY, SELECTED, UPLOADED
 from publishing.identity import Principal
 
@@ -61,12 +62,13 @@ class WebPipeline:
     """Turns one selected asset into a ready, captioned, edited asset."""
 
     def __init__(self, buffer, groq_factory, model, language="english",
-                 edit_photo=None, styles=None):
+                 edit_photo=None, styles=None, occasion_hint=None):
         self.buffer = buffer
         self._groq_factory = groq_factory
         self._groq = None
         self.model = model
         self.language = language
+        self.occasion_hint = occasion_hint     # (principal, asset) -> context str | None
         if edit_photo is None or styles is None:
             from editor import STYLES, edit_photo as _edit
             edit_photo, styles = edit_photo or _edit, styles or STYLES
@@ -90,28 +92,27 @@ class WebPipeline:
         )
         return _parse_json(resp.choices[0].message.content)
 
-    def score_and_style(self, image_b64, vibe=DEFAULT_VIBE):
-        prompt = (
-            "You are VibeOS Photo Engine. Evaluate this photo for social media.\n"
-            f"Preferred visual style: {vibe}.\n"
-            "Score composition, lighting, aesthetic and post potential from 0 to 100. "
-            "Do not identify the person, infer sensitive information, or judge bodies.\n"
-            f"Pick the best editing filter from: {', '.join(sorted(self.styles))}.\n"
-            'Return ONLY JSON: {"final_score": 0, "filter": "natural", "reason": "short"}'
-        )
+    def score_and_style(self, image_b64, vibe=None, quality_score=None):
+        """One vision call: rubric score (photo_judge) + AI-chosen edit style.
+
+        `vibe` is only a soft preference; the AI picks the style that fits the photo.
+        """
         try:
-            data = self._vision(prompt, image_b64, 0.3)
-            score = max(0, min(100, int(float(data.get("final_score", 0)))))
-            style = data.get("filter") if data.get("filter") in self.styles else vibe
-            return {"score": score, "style": style}
+            return photo_judge.judge_photo(
+                self._vision, image_b64,
+                styles=sorted(self.styles),
+                caption_styles=list(copywriter.CAPTION_STYLES),
+                vibe_hint=vibe, quality_score=quality_score)
         except Exception:
             logger.exception("Web photo scoring failed")
             raise
 
-    def caption(self, image_b64, vibe, recent):
-        mode = vibe if vibe in copywriter.CAPTION_STYLES else "natural"
+    def caption(self, image_b64, vibe, recent, mode=None, context=None):
+        mode = mode if mode in copywriter.CAPTION_STYLES else (
+            vibe if vibe in copywriter.CAPTION_STYLES else "natural")
         prompt = copywriter.build_prompt(
-            mode=mode, vibe=vibe, language=self.language, recent_captions=recent)
+            mode=mode, vibe=vibe, language=self.language, recent_captions=recent,
+            trend_context=context)
         last = None
         for attempt in range(2):
             try:
@@ -137,14 +138,28 @@ class WebPipeline:
         """selected -> ready. Returns "ready", "skipped" or raises on failure."""
         data = self.buffer.get_media_for(principal, asset_id)
         image_b64 = base64.b64encode(_small_jpeg(data)).decode()
-        verdict = self.score_and_style(image_b64)
+        asset = self.buffer.assets.find_one({"_id": asset_id}) or {}
+        quality = (asset.get("analysis") or {}).get("quality_score")
+        verdict = self.score_and_style(image_b64, quality_score=quality)
+        detail = dict(
+            web_score=verdict["score"], web_scores=verdict["scores"],
+            web_flags=verdict["flags"], web_style=verdict["style"],
+            web_style_confidence=verdict["style_confidence"],
+            web_style_reason=verdict["style_reason"], web_reason=verdict["reason"],
+        )
         if verdict["score"] < MIN_AUTO_SCORE:
             self.buffer.release(asset_id)
-            self.note(asset_id, web_note="low_score", web_score=verdict["score"],
-                      updated_at=_now())
+            self.note(asset_id, web_note="low_score", updated_at=_now(), **detail)
             return "skipped"
         style = verdict["style"]
-        copy = self.caption(image_b64, style, self._recent_captions(principal))
+        context = None
+        if self.occasion_hint is not None:
+            try:                                   # never lets context break a normal post
+                context = self.occasion_hint(principal, asset)
+            except Exception:
+                logger.exception("Occasion hint failed; writing a normal caption")
+        copy = self.caption(image_b64, style, self._recent_captions(principal),
+                            mode=verdict["caption_mode"], context=context)
         overlay = copy.get("overlay") or None
 
         def _edit(raw, _vibe, size):
@@ -153,7 +168,7 @@ class WebPipeline:
         self.buffer.prepare_ready(
             asset_id, copy["caption"], copy["hashtags"], style,
             ("post", "story"), _edit)
-        self.note(asset_id, web_note=None, web_score=verdict["score"])
+        self.note(asset_id, web_note=None, **detail)
         return "ready"
 
 

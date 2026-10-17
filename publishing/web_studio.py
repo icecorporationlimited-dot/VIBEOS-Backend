@@ -104,10 +104,11 @@ def _parse_files(content_type, raw):
 
 class WebStudio:
     def __init__(self, cfg, sessions, buffer, autopilot, accounts=None,
-                 service=None, ingest=None, posting_engine=False):
+                 service=None, ingest=None, posting_engine=False, planner=None):
         self.cfg, self.sessions, self.buffer = cfg, sessions, buffer
         self.autopilot, self.accounts = autopilot, accounts
         self.service, self.ingest = service, ingest
+        self.planner = planner          # context_engine.ContextPlanner or None
         # False until the worker publishes web-owned jobs; the UI tells the truth about it.
         self.posting_engine = bool(posting_engine)
         self.origin = cfg.public_base_url.rstrip("/")
@@ -223,6 +224,36 @@ class WebStudio:
         if active:
             return "processing", "Preparing…", None
         return "waiting", "In buffer · Autopilot off", None
+
+    # ---- occasions (context engine) -------------------------------------------
+    def occasions(self, cookie_header):
+        principal = self._principal(cookie_header)
+        if principal is None:
+            return _err(401, "Please sign in.")
+        if self.planner is None:
+            return _json(200, {"available": False})
+        jobs = self.service.jobs_for(principal, 300) if self.service else []
+        try:
+            data = self.planner.overview(principal, jobs)
+        except Exception:
+            logger.exception("Occasion overview failed")
+            return _err(500, "Could not load occasions.")
+        data["available"] = True
+        return _json(200, data)
+
+    def set_occasions(self, cookie_header, headers, body):
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        try:
+            data = json.loads(body or b"{}")
+            from context_engine.prefs import clean_prefs
+            fresh = clean_prefs(data)
+            current = (self.autopilot.get(principal).get("occasions") or {})
+            self.autopilot.update(principal, occasions={**current, **fresh})
+        except ValueError as exc:
+            return _err(400, str(exc))
+        return self.occasions(cookie_header)
 
     # ---- upload -------------------------------------------------------------
     def upload(self, cookie_header, headers, raw):

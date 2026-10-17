@@ -39,11 +39,15 @@ class Calendar:
                     times.append(_aware(when))
         return times
 
-    def next_slot(self, telegram_id, horizon_days=10, not_before=None, not_after=None):
+    def next_slot(self, telegram_id, horizon_days=10, not_before=None, not_after=None,
+                  prefer_slots=None):
         """Next free slot as UTC datetime.
 
         Optional aware local datetimes constrain the candidate window; normal
         callers can omit them and retain the original calendar behaviour.
+        `prefer_slots` (list of "HH:MM") replaces the user's slot list for this
+        call only (occasion peak hours / time-of-day fit). Quiet hours, the
+        daily limit and the minimum gap still apply.
         """
         principal = (telegram_id if isinstance(telegram_id, Principal)
                      else Principal.from_telegram(telegram_id))
@@ -61,6 +65,7 @@ class Calendar:
             not_after = not_after.astimezone(tz)
         gap = timedelta(minutes=s["min_gap_minutes"])
         busy = self._busy_times(telegram_id)
+        slot_list = list(prefer_slots) if prefer_slots else s["slots"]
 
         # Spread general content over the whole planning horizon instead of
         # always filling tomorrow's first slot. Constrained event/date windows
@@ -73,7 +78,7 @@ class Calendar:
             start, end = day_bounds(day_local)
             if len([t for t in busy if start <= t < end]) >= s["daily_limit"]:
                 continue
-            for slot in s["slots"]:
+            for slot in slot_list:
                 hh, mm = (int(x) for x in slot.split(":"))
                 local = datetime.combine(day, time(hh, mm), tzinfo=tz)
                 if not_after is not None and local > not_after:

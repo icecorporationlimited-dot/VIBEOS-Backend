@@ -34,6 +34,7 @@ DEFAULTS = {
     "min_gap_minutes": 60,
     "slots": ["12:30", "19:30"],
     "timezone": "",              # IANA name; "" = use the owner's default (web users set it)
+    "occasions": {},             # context engine preferences (context_engine.prefs)
 }
 _SLOT = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
@@ -60,6 +61,9 @@ def _clean(field, value):
         if mode not in ("off", "auto"):
             raise ValueError("Trend stories must be: off or auto.")
         return mode
+    if field == "occasions":
+        from context_engine.prefs import clean_prefs
+        return clean_prefs(value)
     if field == "daily_limit":
         return _int(value, 1, 10, "Daily limit")
     if field in ("quiet_start", "quiet_end"):

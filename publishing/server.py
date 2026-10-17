@@ -60,7 +60,9 @@ class web_studio_limits:            # plain holder so tests can lower the cap
 
 
 STUDIO_GET = "/web/api/state"
-STUDIO_JSON_POST = {"/web/api/autopilot": "set_autopilot", "/web/api/media/delete": "delete_media"}
+STUDIO_JSON_POST = {"/web/api/autopilot": "set_autopilot", "/web/api/media/delete": "delete_media",
+                    "/web/api/occasions": "set_occasions"}
+STUDIO_OCCASIONS = "/web/api/occasions"
 STUDIO_UPLOAD = "/web/api/media"
 JSON_BODY_LIMIT = 16 * 1024
 
@@ -118,6 +120,9 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
                 return self._send(status, body, "application/json", extra=headers)
             if web_studio is not None and url.path == STUDIO_GET:
                 status, body, headers = web_studio.state(self.headers.get("Cookie", ""))
+                return self._send(status, body, "application/json", extra=headers)
+            if web_studio is not None and url.path == STUDIO_OCCASIONS:
+                status, body, headers = web_studio.occasions(self.headers.get("Cookie", ""))
                 return self._send(status, body, "application/json", extra=headers)
             if web_login is not None and url.path == "/web":
                 status, body, headers = web_login.home(self.headers.get("Cookie", ""))

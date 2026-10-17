@@ -106,7 +106,7 @@ def build_runtime(db, content_buffer, bot_token):
     tz_for = make_tz_for(autopilot, lambda tg: memory.get_preferences(tg)["timezone"])
     service.gate = PolicyEngine(db["publish_jobs"], content_buffer, autopilot, tz_for)
     calendar = Calendar(db["publish_jobs"], autopilot, tz_for)
-    from content_planner import ContentPlanner
+    from context_engine.planner import ContextPlanner as ContentPlanner   # drop-in upgrade
     import settings as app_settings
     planner = ContentPlanner(
         content_buffer, calendar,
@@ -176,12 +176,14 @@ def build_runtime(db, content_buffer, bot_token):
         pipeline = WebPipeline(
             content_buffer, _groq,
             getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b"),
-            language=getattr(app_settings, "CAPTION_LANGUAGE", "english"))
+            language=getattr(app_settings, "CAPTION_LANGUAGE", "english"),
+            occasion_hint=getattr(planner, "occasion_hint", None))
         web_ingest = WebIngest(content_buffer, autopilot, pipeline)
         web_studio = WebStudio(
             cfg, sessions, content_buffer, autopilot, accounts=accounts,
             service=service, ingest=web_ingest,
-            posting_engine=getattr(worker, "handles_web_owners", False))
+            posting_engine=getattr(worker, "handles_web_owners", False),
+            planner=planner)
 
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
