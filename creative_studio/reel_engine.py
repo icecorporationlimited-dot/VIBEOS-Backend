@@ -51,7 +51,7 @@ def build_reel_plan(clip_metadata: list[dict[str, Any]], target_seconds: int = 2
             "note": "This first renderer makes a photo slideshow; semantic scene ranking and transitions remain future work."}
 
 
-def render_photo_reel(image_paths: list[str | Path], output_path: str | Path, *,
+def _render_photo_reel_impl(image_paths: list[str | Path], output_path: str | Path, *,
                       seconds_per_photo: float = 2.5, audio_path: str | Path | None = None,
                       width: int = 1080, height: int = 1920, fps: int = 30) -> Path:
     """Render photos to a 9:16 H.264 MP4. Optional audio must be rights-cleared by caller."""
@@ -99,7 +99,7 @@ def render_photo_reel(image_paths: list[str | Path], output_path: str | Path, *,
                         "-c:a", "aac", "-b:a", "192k"]
         else:
             command += ["-an"]
-        command += ["-vf", f"fps={fps},format=yuv420p", "-c:v", "libx264", "-preset", "medium",
+        command += ["-vf", f"fps={fps},format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-threads", "2",
                     "-crf", "20", "-movflags", "+faststart", str(out)]
         proc = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)
         if proc.returncode:
@@ -109,3 +109,10 @@ def render_photo_reel(image_paths: list[str | Path], output_path: str | Path, *,
         out.unlink(missing_ok=True)
         raise RuntimeError("Rendered video failed vertical/duration validation")
     return out
+
+
+def render_photo_reel(*args, **kwargs):
+    """Gated render: one heavy job at a time (see limits.py)."""
+    from limits import heavy_slot
+    with heavy_slot():
+        return _render_photo_reel_impl(*args, **kwargs)

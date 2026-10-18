@@ -27,10 +27,10 @@ from .web_routes import CSRF_COOKIE, _cookie_value
 
 logger = logging.getLogger(__name__)
 
-MAX_FILES_PER_UPLOAD = 10
+MAX_FILES_PER_UPLOAD = 5
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_BODY = 45 * 1024 * 1024
-MAX_PIXELS = 50_000_000
+MAX_PIXELS = 25_000_000
 MAX_LIST = 200
 
 # Settings the browser may change (everything else is rejected, not ignored).

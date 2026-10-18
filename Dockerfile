@@ -1,7 +1,8 @@
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    MALLOC_ARENA_MAX=2
 
 # FFmpeg: Reels. fonts-noto-color-emoji + libraqm0: emoji and Devanagari on Story cards
 RUN apt-get update \

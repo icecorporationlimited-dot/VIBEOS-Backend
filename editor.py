@@ -19,6 +19,7 @@ Usage:
     # `out` is a BytesIO (JPEG), ready for reply_photo(photo=out)
 """
 import io
+import os
 import re
 from pathlib import Path
 
@@ -31,6 +32,13 @@ except Exception:  # pragma: no cover - depends on host
     cv2 = None
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
+
+from limits import heavy_slot  # noqa: E402
+
+# Memory guards (Render 512 MB). 1920 keeps Stories (1080x1920) sharp; the old
+# value was 2600. Override with EDIT_MAX_SIDE / EDIT_MAX_PIXELS if you get more RAM.
+EDIT_MAX_SIDE = int(os.environ.get("EDIT_MAX_SIDE", "1920"))
+EDIT_MAX_PIXELS = int(os.environ.get("EDIT_MAX_PIXELS", str(25_000_000)))
 
 # Output sizes (Instagram native)
 SIZES = {
@@ -96,8 +104,17 @@ LUMA = np.array([0.299, 0.587, 0.114], dtype=np.float32)
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
-def _load(image_bytes, max_side=2600):
+def _load(image_bytes, max_side=None):
+    max_side = max_side or EDIT_MAX_SIDE
     img = Image.open(io.BytesIO(image_bytes))
+    if img.width * img.height > EDIT_MAX_PIXELS:
+        raise ValueError("Image is too large to edit.")
+    if img.format == "JPEG":
+        # Let the JPEG decoder shrink while decoding (much less RAM for big photos).
+        # (request the final size with the same aspect ratio, or draft() can't shrink)
+        ratio = max_side / max(img.size)
+        if ratio < 1:
+            img.draft("RGB", (int(img.width * ratio) + 1, int(img.height * ratio) + 1))
     img = ImageOps.exif_transpose(img).convert("RGB")
     if max(img.size) > max_side:
         img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
@@ -582,7 +599,7 @@ def _add_text(img, text, style="minimal", position="bottom", is_story=False):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def edit_photo(
+def _edit_photo_impl(
     image_bytes,
     style="natural",
     size="post",
@@ -619,3 +636,9 @@ def edit_photo(
     img.save(out, format="JPEG", quality=95, subsampling=0, optimize=True)
     out.seek(0)
     return (out, report) if return_report else out
+
+
+def edit_photo(*args, **kwargs):
+    """Same as before, but only HEAVY_CONCURRENCY edits run at once (see limits.py)."""
+    with heavy_slot():
+        return _edit_photo_impl(*args, **kwargs)
