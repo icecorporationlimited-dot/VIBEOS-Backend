@@ -10,19 +10,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Callable
 
+import jobs
 from autonomous.decision_engine import decide_content
 from content_buffer import owner_query
-from creative_studio.story_templates import render_trend_story
 from publishing.identity import Principal, document_principal
 from trends import safety
 from trends.schema import make_key
-from trends.smart_story import build_story
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +88,30 @@ def order_for_user(tg, items, buffer, cfg, now):
     return sorted(pool, key=rank) + ranked[len(pool):]   # rest stay as fallback: never post fewer stories
 
 
+STORY_JOB_TIMEOUT = 90
+
+
+def _render_job(buffer, principal, job_type, payload, key):
+    """Run a render on the worker (enqueue + wait). Returns the job result.
+
+    The job is keyed per (owner, trend) so a retry after a timeout reuses the open
+    job instead of queueing a second render. The rendered JPEG comes back as a
+    scratch blob id; it is read and deleted here.
+    """
+    db = buffer.assets.database
+    ref = f"trend:{principal.owner_id}:{key}"
+    open_job = jobs.find_open(db, job_type, ref)
+    job_id = open_job["_id"] if open_job else jobs.enqueue(db, job_type, payload, asset_id=ref)
+    return jobs.wait(db, job_id, timeout=STORY_JOB_TIMEOUT)
+
+
+def _take_blob(buffer, blob_id):
+    db = buffer.assets.database
+    data = jobs.get_blob(db, blob_id)
+    jobs.delete_blob(db, blob_id)
+    return data
+
+
 def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, service, now=None):
     """Queue one trend Story. Returns a dict describing it, or None if nothing qualified."""
     now = now or datetime.now(timezone.utc)
@@ -104,11 +125,21 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
         if buffer.assets.find_one({**owner_query(principal), "trend_key": key}):
             continue                                  # this trend was already used
         if cfg.smart:
-            built = build_story(item, ai=cfg.ai, brand=cfg.brand,
-                                blocked_topics=settings.get("blocked_topics") or [],
-                                min_sources=cfg.min_sources, min_traffic=cfg.min_traffic,
-                                allow_solemn=cfg.allow_solemn, show_sources=cfg.show_sources, now=now,
-                                variant=variant)
+            # verify -> AI plan -> render all run in the worker (trends.smart_story.build_story)
+            try:
+                res = _render_job(buffer, principal, "smart_story", {
+                    "item": item, "brand": cfg.brand,
+                    "blocked_topics": list(settings.get("blocked_topics") or []),
+                    "min_sources": cfg.min_sources, "min_traffic": cfg.min_traffic,
+                    "allow_solemn": cfg.allow_solemn, "show_sources": cfg.show_sources,
+                    "now": now.isoformat(), "variant": variant}, key)
+            except jobs.JobTimeout:
+                logger.warning("Story worker busy/offline; will retry next pass")
+                return None            # do not wait again for every remaining trend
+            except Exception:
+                logger.exception("Smart story job failed for %s", str(item.get("title"))[:60])
+                continue
+            built = {**res, "jpg": _take_blob(buffer, res["blob_id"]) if res.get("blob_id") else None}
             if not built["ok"]:
                 logger.info("Trend skipped (%s): %s", built["reason"], str(item.get("title"))[:60])
                 continue
@@ -127,14 +158,16 @@ def post_one(tg, items, *, cfg: TrendStoryConfig, settings: dict, buffer, servic
             continue
 
         if not cfg.smart:
-            with tempfile.TemporaryDirectory(prefix="vibeos_trend_") as tmp:
-                path = Path(tmp) / "story.jpg"
-                try:
-                    render_trend_story(item, path, brand=cfg.brand, show_headline=cfg.show_headline)
-                except (OSError, ValueError):
-                    logger.exception("Trend card render failed")
-                    continue
-                data = path.read_bytes()
+            try:
+                res = _render_job(buffer, principal, "story_card", {
+                    "item": item, "brand": cfg.brand, "show_headline": cfg.show_headline}, key)
+                data = _take_blob(buffer, res["blob_id"])
+            except jobs.JobTimeout:
+                logger.warning("Story worker busy/offline; will retry next pass")
+                return None
+            except Exception:
+                logger.exception("Trend card render failed")
+                continue
 
         publishers = []
         for n in item.get("news") or []:

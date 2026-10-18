@@ -1,0 +1,11 @@
+# Background Worker (worker.py): no web server, no Telegram.
+# Add opencv-python-headless only if you want better face detection in editor.py
+# (it is optional and the biggest RAM cost, so it is OFF by default).
+pymongo
+dnspython
+Pillow
+numpy
+requests
+cryptography
+PyJWT[crypto]>=2.8,<3
+tzdata

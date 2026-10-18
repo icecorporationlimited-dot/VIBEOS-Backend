@@ -1,0 +1,22 @@
+# Background Worker: ffmpeg for Reels, fonts + libraqm for Story cards
+# (emoji + Devanagari), Pillow/numpy for editing. No web server.
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MALLOC_ARENA_MAX=2
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-noto-color-emoji libraqm0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements-worker.txt .
+RUN pip install --no-cache-dir -r requirements-worker.txt
+
+COPY . .
+
+RUN useradd --create-home --uid 10001 vibeos && chown -R vibeos:vibeos /app
+USER vibeos
+
+CMD ["python", "worker.py"]

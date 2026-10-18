@@ -1,4 +1,5 @@
 services:
+  # ---- web + Telegram bot (light: no ffmpeg / fonts / OpenCV) ----
   - type: web
     name: vibeos
     runtime: docker
@@ -24,3 +25,6 @@ services:
         value: qwen/qwen3.8-27b
       - key: WEB_PUBLISHING      # 1 = post for web dashboard users (test with your own account first)
         value: "0"
+
+# Heavy workers now live in 3 separate Render accounts:
+# render.reel.yaml / render.story.yaml / render.photo.yaml

@@ -34,7 +34,9 @@ from telegram.request import HTTPXRequest
 
 import settings
 import copywriter
-from editor import edit_photo, STYLES as EDITOR_STYLES
+import imgutil
+import jobs
+from media_names import STYLES as EDITOR_STYLES   # names only; editor.py runs in worker.py
 from content_buffer import ContentBuffer, GridFSBlobStore
 import memory
 import publish_bot
@@ -156,7 +158,28 @@ async def download_telegram_photo(context, file_id):
 
     await telegram_file.download_to_memory(buffer)
 
-    return buffer.getvalue()
+    return imgutil.downscale(buffer.getvalue())   # max 2048 px long edge
+
+
+EDIT_JOB_TIMEOUT = 120
+
+
+async def edit_via_worker(data, style, size="post", text=None,
+                          text_style="minimal", text_position="bottom"):
+    """Drop-in for editor.edit_photo(): the edit runs in the worker service.
+
+    Enqueues an `edit` job, waits for it without blocking the event loop and
+    returns a BytesIO JPEG, so callers stay unchanged. Raises jobs.JobFailed /
+    jobs.JobTimeout if the worker is down or the job keeps failing.
+    """
+    blob_id = await asyncio.to_thread(jobs.put_blob, db, data, "edit_in.jpg")
+    res = await jobs.run_async(db, "edit", {
+        "in_blob": blob_id, "style": style, "size": size, "text": text,
+        "text_style": text_style, "text_position": text_position,
+    }, timeout=EDIT_JOB_TIMEOUT)
+    out = await asyncio.to_thread(jobs.get_blob, db, res["blob_id"])
+    await asyncio.to_thread(jobs.delete_blob, db, res["blob_id"])
+    return io.BytesIO(out)
 
 
 def get_latest_owned_photo(user_id, include_approved=True):
@@ -941,8 +964,7 @@ async def send_preview(
 
     overlay = social_copy.get("overlay", "")
 
-    edited_image = await asyncio.to_thread(
-        edit_photo,
+    edited_image = await edit_via_worker(
         image_bytes,
         style,
         "post",
@@ -1156,17 +1178,16 @@ async def auto_prepare(user_id, image_bytes, file_id, asset_id, vibe):
     style = analysis.get("filter", vibe)
     overlay = social_copy.get("overlay") or None
 
-    def _edit(data, _vibe, size):
-        return edit_photo(data, style, size, overlay, "minimal")
-
     await asyncio.to_thread(
-        content_buffer.prepare_ready,
+        content_buffer.prepare_ready_job,
         asset_id,
         social_copy["caption"],
         social_copy["hashtags"],
         style,
         ("post", "story"),
-        _edit,
+        style=style,
+        overlay=overlay,
+        text_style="minimal",
     )
     photos.insert_one({
         "telegram_id": str(user_id),
@@ -1529,8 +1550,7 @@ async def rerender_preview(query, context, doc, **changes):
     style = doc.get("analysis", {}).get("filter", doc.get("vibe", DEFAULT_VIBE))
     overlay = doc.get("overlay") if settings["show_text"] else None
 
-    edited = await asyncio.to_thread(
-        edit_photo,
+    edited = await edit_via_worker(
         image_bytes,
         style,
         settings["size"],
@@ -1718,18 +1738,17 @@ async def button_handler(update, context):
             overlay = doc.get("overlay") if doc.get("show_text", True) else None
             text_style = doc.get("text_style", "minimal")
 
-            def _edit(data, _vibe, size):
-                return edit_photo(data, style, size, overlay or None, text_style)
-
             try:
                 await asyncio.to_thread(
-                    content_buffer.prepare_ready,
+                    content_buffer.prepare_ready_job,
                     asset_id,
                     doc.get("caption", ""),
                     doc.get("hashtags", []),
                     style,
                     ("post", "story"),
-                    _edit,
+                    style=style,
+                    overlay=overlay or None,
+                    text_style=text_style,
                 )
                 ready_note = (
                     "📦 Publish-ready: post + story versions saved.\n\n"
@@ -2236,6 +2255,7 @@ def main():
     logger.info("VibeOS Photo Engine starting...")
     memory.ensure_indexes()  # also verifies MongoDB is reachable
     content_buffer.ensure_indexes()
+    jobs.ensure_indexes(db)   # media_jobs: (status, type, created) + finished-job TTL
     # Phase 2: Instagram publishing (None if Meta settings are not filled in settings.py)
     publishing = publish_bot.build_runtime(db, content_buffer, BOT_TOKEN)
 

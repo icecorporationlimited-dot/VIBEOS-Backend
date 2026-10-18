@@ -69,9 +69,12 @@ class WebPipeline:
         self.model = model
         self.language = language
         self.occasion_hint = occasion_hint     # (principal, asset) -> context str | None
-        if edit_photo is None or styles is None:
-            from editor import STYLES, edit_photo as _edit
-            edit_photo, styles = edit_photo or _edit, styles or STYLES
+        # Production: edit_photo is None -> the render runs in worker.py via a
+        # `prepare_ready` job, so this process never imports editor/numpy-heavy code.
+        # Tests may still inject a local edit_photo callable.
+        if styles is None:
+            from media_names import STYLES
+            styles = STYLES
         self.edit_photo, self.styles = edit_photo, set(styles)
 
     # ---- AI calls (sync; run in the worker thread) -------------------------
@@ -162,12 +165,17 @@ class WebPipeline:
                             mode=verdict["caption_mode"], context=context)
         overlay = copy.get("overlay") or None
 
-        def _edit(raw, _vibe, size):
-            return self.edit_photo(raw, style, size, overlay, "minimal")
+        if self.edit_photo is None:
+            self.buffer.prepare_ready_job(
+                asset_id, copy["caption"], copy["hashtags"], style, ("post", "story"),
+                style=style, overlay=overlay, text_style="minimal")
+        else:                                  # injected local editor (tests)
+            def _edit(raw, _vibe, size):
+                return self.edit_photo(raw, style, size, overlay, "minimal")
 
-        self.buffer.prepare_ready(
-            asset_id, copy["caption"], copy["hashtags"], style,
-            ("post", "story"), _edit)
+            self.buffer.prepare_ready(
+                asset_id, copy["caption"], copy["hashtags"], style,
+                ("post", "story"), _edit)
         self.note(asset_id, web_note=None, **detail)
         return "ready"
 

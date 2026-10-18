@@ -31,7 +31,8 @@ from fastapi.staticfiles import StaticFiles
 
 import copywriter
 import settings
-from editor import SIZES, STYLES, edit_photo
+import jobs
+from media_names import SIZES, STYLES   # names only; editing happens in worker.py
 
 logger = logging.getLogger("vibeos.api")
 
@@ -39,6 +40,7 @@ WEB_API_KEY = os.environ.get("WEB_API_KEY", "")
 ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("WEB_ORIGINS", "").split(",") if o.strip()]
 INTERNAL_PORT = int(os.environ.get("INTERNAL_PORT", "10001"))
 MAX_UPLOAD = 12 * 1024 * 1024  # 12 MB
+EDIT_WAIT_SECONDS = 45          # /api/edit waits this long, then answers 202 + job_id
 TEXT_STYLES = ["minimal", "bold", "serif"]
 TEXT_POSITIONS = ["bottom", "center", "top"]
 
@@ -60,6 +62,17 @@ def _groq_client():
         from groq import Groq
         _groq = Groq(api_key=settings.GROQ_API_KEY)
     return _groq
+
+
+def _db():
+    import memory            # shared pymongo handle (no image libraries)
+    return memory.db
+
+
+def _jpeg_response(data: bytes, report: dict) -> Response:
+    short = json.dumps({k: str(v)[:60] for k, v in (report or {}).items()})
+    return Response(data, media_type="image/jpeg",
+                    headers={"X-Edit-Report": short, "Cache-Control": "no-store"})
 
 
 def _check_key(key: str | None):
@@ -129,19 +142,45 @@ async def api_edit(
     if text_style not in TEXT_STYLES or text_position not in TEXT_POSITIONS:
         raise HTTPException(400, "invalid text_style or text_position")
     data = await _read_image(file)
+    db = _db()
+    in_blob = await asyncio.to_thread(jobs.put_blob, db, data, "api_edit.jpg")
+    job_id = await asyncio.to_thread(jobs.enqueue, db, "edit", {
+        "in_blob": in_blob, "style": style, "size": size, "text": text.strip()[:80] or None,
+        "text_style": text_style, "text_position": text_position,
+    })
     try:
-        out, report = await asyncio.to_thread(
-            edit_photo, data, style, size, text.strip()[:80] or None,
-            text_style, text_position, True,
-        )
-    except Exception:
+        res = await jobs.wait_async(db, job_id, timeout=EDIT_WAIT_SECONDS)
+    except jobs.JobTimeout:
+        # Worker is busy or cold-starting: tell the client to poll /api/jobs/{id}.
+        return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
+    except jobs.JobFailed:
         logger.exception("edit failed")
         raise HTTPException(422, "Could not process this image.")
-    short = json.dumps({k: str(v)[:60] for k, v in (report or {}).items()})
-    return Response(
-        out.getvalue(), media_type="image/jpeg",
-        headers={"X-Edit-Report": short, "Cache-Control": "no-store"},
-    )
+    out = await asyncio.to_thread(jobs.get_blob, db, res["blob_id"])
+    await asyncio.to_thread(jobs.delete_blob, db, res["blob_id"])
+    return _jpeg_response(out, res.get("report"))
+
+
+@app.get("/api/jobs/{job_id}")
+async def api_job(job_id: str, x_api_key: str | None = Header(default=None)):
+    """Poll an /api/edit job that answered 202: 202 while pending, 200 + JPEG when done."""
+    _check_key(x_api_key)
+    if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+        raise HTTPException(404, "Not found")
+    db = _db()
+    job = await asyncio.to_thread(jobs.get, db, job_id)
+    if job is None or job["type"] != "edit":
+        raise HTTPException(404, "Not found")
+    if job["status"] == jobs.FAILED:
+        raise HTTPException(422, "Could not process this image.")
+    if job["status"] != jobs.DONE:
+        return JSONResponse({"job_id": job_id, "status": job["status"]}, status_code=202)
+    res = job.get("result") or {}
+    try:
+        out = await asyncio.to_thread(jobs.get_blob, db, res["blob_id"])
+    except Exception:
+        raise HTTPException(410, "Result expired; submit the image again.")
+    return _jpeg_response(out, res.get("report"))
 
 
 @app.post("/api/caption")

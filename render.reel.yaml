@@ -1,0 +1,16 @@
+# Render account: vibeos-worker-reel
+# Web Service (NOT background worker) -> worker.py opens a tiny health server on $PORT.
+services:
+  - type: web
+    name: vibeos-worker-reel
+    runtime: docker
+    dockerfilePath: ./Dockerfile.worker
+    plan: starter                 # free = sleeps after 15 min idle (needs external pinger), starter = 24/7
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI        # SAME value in all 3 accounts + main web service
+        sync: false
+      - key: JOB_TYPES
+        value: reel
+

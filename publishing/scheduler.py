@@ -19,7 +19,6 @@ the middle of a publish) can't post twice. The worker only decides *when to look
 """
 import logging
 import random
-import tempfile
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -401,8 +400,10 @@ class Worker:
         if until and self.clock() < until:
             return False
         try:
-            from creative_studio import reel_engine
-            return reel_engine.check_video_tools()["ffmpeg"]
+            import jobs
+            # ffmpeg lives in the worker service now: Reels are on only while a
+            # reel-capable worker is alive (it posts a heartbeat every 30 s).
+            return jobs.worker_available(self.buffer.assets.database, "reel", cap="ffmpeg")
         except Exception:
             return False
 
@@ -415,25 +416,16 @@ class Worker:
         return random.choice(files) if files else None
 
     def _build_reel(self, tg, route):
-        """Render a Reel from the route's photos (their 9:16 variants).
+        """Queue a Reel render on the worker and return a normal {"format": "reel", ...} route.
 
-        Returns a normal {"format": "reel", ...} route, or None on failure. A failed
-        render pauses Reel building for this user for an hour instead of retrying
-        every minute.
+        This process does no rendering: it enqueues a `reel` job (worker.py: ffmpeg,
+        Pillow) and waits for the new ready video asset. Returns None on failure. A
+        failed render pauses Reel building for this user for an hour instead of
+        retrying every minute.
         """
         try:
-            from creative_studio import reel_engine
+            import jobs
             assets = [self.buffer.assets.find_one({"_id": i}) for i in route["asset_ids"]]
-            with tempfile.TemporaryDirectory(prefix="vibeos_reelsrc_") as tmp:
-                paths = []
-                for n, a in enumerate(assets):
-                    p = Path(tmp) / f"{n:02d}.jpg"
-                    p.write_bytes(self.buffer.get_media(a["_id"], "story"))
-                    paths.append(p)
-                out = Path(tmp) / "reel.mp4"
-                reel_engine.render_photo_reel(paths, out, audio_path=self._pick_audio())
-                meta = reel_engine.probe_video(out)
-                data = out.read_bytes()
             best = max(assets, key=lambda a: float((a.get("analysis") or {}).get("quality_score") or 0))
             tags = []
             for a in [best] + [a for a in assets if a is not best]:
@@ -441,15 +433,21 @@ class Worker:
                     if t not in tags:
                         tags.append(t)
             creative = best.get("creative") or {}
-            res = self.buffer.add_reel(
-                tg, data, meta=meta, caption=creative.get("caption", ""), hashtags=tags[:svc.HASHTAG_LIMIT],
-                vibe=creative.get("vibe", "natural"), source_ids=route["asset_ids"],
-                batch_id=best.get("batch_id"))
+            audio = self._pick_audio()
+            res = jobs.run(self.buffer.assets.database, "reel", {
+                "principal": {"kind": tg.kind, "subject": tg.subject},
+                "asset_ids": list(route["asset_ids"]),
+                "audio_path": str(audio) if audio else None,
+                "caption": creative.get("caption", ""),
+                "hashtags": tags[:svc.HASHTAG_LIMIT],
+                "vibe": creative.get("vibe", "natural"),
+                "batch_id": best.get("batch_id"),
+            }, asset_id=route["asset_ids"][0], timeout=345)
+            reel_id = res["reel_id"]
         except Exception:
             logger.exception("Reel render failed for %s; pausing Reel building for 1h", tg.owner_id)
             self._reel_blocked[tg.owner_id] = self.clock() + timedelta(hours=1)
             return None
-        reel_id = res["asset"]["_id"]
         for aid in route["asset_ids"]:
             self.buffer.assets.update_one({"_id": aid}, {"$set": {"route": {
                 "format": "reel_source", "reel_id": reel_id}}})

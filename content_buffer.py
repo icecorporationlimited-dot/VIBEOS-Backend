@@ -16,6 +16,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import imgutil
 import media_quality as mq
 from publishing.identity import Principal, owner_filter
 
@@ -186,7 +187,12 @@ class ContentBuffer:
             return {"asset": existing, "duplicate": True}
 
         self._check_quota(user_id)
-        blob_id = self.blobs.put(data, filename=filename)
+        # Photos are stored at most 2048 px on the long edge: every later step
+        # (analysis, edit, post/story crops of 1080 px) only needs that, and it
+        # keeps RAM and Atlas storage down. sha256 stays that of the ORIGINAL
+        # bytes so re-uploading the same file is still detected as a duplicate.
+        stored = imgutil.downscale(data) if kind == "photo" else data
+        blob_id = self.blobs.put(stored, filename=filename)
         now = _now()
         doc = {
             "_id": uuid.uuid4().hex,
@@ -196,7 +202,7 @@ class ContentBuffer:
             "filename": filename,
             "source": source,
             "sha256": digest,
-            "size_bytes": len(data),
+            "size_bytes": len(stored),
             "blob_id": blob_id,
             "status": UPLOADED,
             "analysis": None,
@@ -436,6 +442,33 @@ class ContentBuffer:
             "variants": variants,
         }
         self._transition(asset_id, READY, {"creative": creative})
+        return self.assets.find_one({"_id": asset_id})
+
+    def prepare_ready_job(self, asset_id, caption, hashtags, vibe="natural",
+                          sizes=("post", "story"), *, style=None, overlay=None,
+                          text_style="minimal", timeout=150) -> dict:
+        """Same contract as prepare_ready(), but the rendering runs in the worker.
+
+        This process only enqueues a `prepare_ready` job (no Pillow/numpy work)
+        and waits for the result. `style=None` uses the adaptive photo engine;
+        otherwise the editor look `style` with the given text overlay.
+        Raises InvalidTransition / KeyError exactly like prepare_ready(), and
+        jobs.JobFailed / jobs.JobTimeout if the worker could not finish it.
+        """
+        import jobs
+        asset = self.assets.find_one({"_id": asset_id})
+        if not asset:
+            raise KeyError(f"Unknown asset {asset_id}")
+        if asset["status"] != SELECTED:
+            raise InvalidTransition(f"{asset['status']} -> ready not allowed")
+        db = self.assets.database
+        open_job = jobs.find_open(db, "prepare_ready", asset_id)
+        job_id = open_job["_id"] if open_job else jobs.enqueue(db, "prepare_ready", {
+            "asset_id": asset_id, "caption": caption, "hashtags": list(hashtags),
+            "vibe": vibe, "sizes": list(sizes), "style": style,
+            "overlay": overlay, "text_style": text_style,
+        }, asset_id=asset_id)
+        jobs.wait(db, job_id, timeout=timeout)
         return self.assets.find_one({"_id": asset_id})
 
     # ---- approval helpers -----------------------------------------------

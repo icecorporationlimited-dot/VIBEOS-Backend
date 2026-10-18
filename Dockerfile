@@ -1,13 +1,9 @@
+# Web/bot service (main). NO ffmpeg, NO fonts, NO OpenCV here: all heavy media
+# work (editing, Reels, Story rendering) runs in Dockerfile.worker.
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    MALLOC_ARENA_MAX=2
-
-# FFmpeg: Reels. fonts-noto-color-emoji + libraqm0: emoji and Devanagari on Story cards
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg fonts-noto-color-emoji libraqm0 \
-    && rm -rf /var/lib/apt/lists/*
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 COPY requirements.txt .

@@ -1,3 +1,5 @@
+# Web/bot service (main). Heavy media work lives in worker.py -> requirements-worker.txt.
+# Pillow + numpy stay: upload analysis (media_quality.py), 2048 px downscale (imgutil.py).
 python-telegram-bot
 pymongo
 Pillow
