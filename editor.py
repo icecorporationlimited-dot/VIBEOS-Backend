@@ -88,6 +88,12 @@ STYLES = {
         fade=0.06, shadows=(-0.012, 0.018, 0.012), highlights=(0.04, 0.02, -0.02),
         clarity=0.04, bloom=0.16, vignette=0.20, grain=0.032, sharpen=50,
     ),
+    # black & white: pure grayscale, strong contrast, light grain
+    "mono": dict(
+        exposure=1.02, contrast=0.40, saturation=0.0, warmth=0.0,
+        fade=0.0, shadows=(0, 0, 0), highlights=(0, 0, 0),
+        clarity=0.18, bloom=0.06, vignette=0.22, grain=0.022, sharpen=80,
+    ),
 }
 
 LUMA = np.array([0.299, 0.587, 0.114], dtype=np.float32)
