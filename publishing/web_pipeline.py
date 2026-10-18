@@ -16,6 +16,7 @@ import queue
 import re
 import threading
 from datetime import datetime, timezone
+from tagger_client import tag_photo
 
 import copywriter
 import photo_judge
@@ -144,6 +145,12 @@ class WebPipeline:
         asset = self.buffer.assets.find_one({"_id": asset_id}) or {}
         quality = (asset.get("analysis") or {}).get("quality_score")
         verdict = self.score_and_style(image_b64, quality_score=quality)
+tag = tag_photo(data)          # OpenCV service; None if down
+if tag and not tag["low_confidence"]:
+    verdict["style"] = tag["style"]
+    verdict["style_confidence"] = tag["style_confidence"]
+    verdict["style_reason"] = "tagger: " + tag["style_label"]
+    verdict["caption_mode"] = tag["style"] if tag["style"] != "mono" else "natural"
         detail = dict(
             web_score=verdict["score"], web_scores=verdict["scores"],
             web_flags=verdict["flags"], web_style=verdict["style"],
@@ -302,3 +309,4 @@ class WebIngest:
                     timer.daemon = True
                     timer.start()
         return out
+
