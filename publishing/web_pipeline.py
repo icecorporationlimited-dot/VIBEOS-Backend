@@ -207,12 +207,14 @@ class WebPipeline:
         try:
             tag = tag_photo(data)
             if tag and not tag.get("low_confidence", True):
-                verdict["style"] = tag["style"]
+                from media_names import resolve_style
+                tag_style = resolve_style(tag["style"], "natural")   # glow->golden, soft->film ...
+                verdict["style"] = tag_style
                 verdict["style_confidence"] = tag["style_confidence"]
                 verdict["style_reason"] = "tagger: " + tag["style_label"]
                 verdict["caption_mode"] = (
-                    tag["style"]
-                    if tag["style"] != "mono"
+                    tag_style
+                    if tag_style != "mono"
                     else "natural"
                 )
         except Exception:

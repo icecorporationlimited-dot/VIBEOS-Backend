@@ -146,6 +146,7 @@ async def api_edit(
     in_blob = await asyncio.to_thread(jobs.put_blob, db, data, "api_edit.jpg")
     job_id = await asyncio.to_thread(jobs.enqueue, db, "edit", {
         "in_blob": in_blob, "style": style, "size": size, "text": text.strip()[:80] or None,
+        "text_required": bool(text.strip()),       # typed by the user = explicit
         "text_style": text_style, "text_position": text_position,
     })
     try:

@@ -54,13 +54,13 @@ MIN_STYLE_CONFIDENCE = 50    # below this the style falls back to "natural"
 
 # What each editing style is for. Only styles that exist in editor.STYLES are shown.
 STYLE_GUIDE = {
-    "natural": "balanced everyday daylight, true-to-life colours, authentic candid look; the safe default",
-    "baddie": "night / flash / glam, bold fashion or confident portraits, strong contrast and punchy colour",
-    "soft": "pastel, airy, bright and gentle light, florals, dreamy low-contrast look",
-    "moody": "dark, low-key, cinematic; rain, night, deep shadows, atmosphere over brightness",
-    "golden": "sunrise / sunset / golden-hour warmth, glowing backlight, warm skin and sky tones",
-    "clean": "bright, minimal, neutral or white backgrounds, cafe/skincare/product/interior polish",
-    "film": "nostalgic analog feel: street, travel, candid or vintage-looking scenes with grain",
+    "natural": "let the engine decide; use only if no look clearly fits",
+    "y2k": "Y2K digicam / direct flash: night out, parties, friend groups, streetwear selfies; bold, candid, dark background",
+    "moody": "cinematic moody: streetwear, travel, architecture, dramatic portraits; deep detailed shadows, background separation",
+    "film": "soft film / warm vintage: cafe, travel dumps, candid moments; relaxed, nostalgic, muted, fine grain",
+    "clean": "clean editorial: outfit/fashion, creator profile, brand work, casual daylight selfies; neutral, accurate colour, crisp",
+    "golden": "golden hour glow: outdoor portraits, sunsets, warm backlight; dreamy, warm without an orange cast",
+    "mono": "monochrome B&W: expressive portraits, street, strong light/shape/composition where colour is not the point",
 }
 
 CAPTION_MODE_GUIDE = {
@@ -79,7 +79,7 @@ def _clamp(value, lo=0, hi=100) -> int:
 # Prompt
 # --------------------------------------------------------------------------
 def build_prompt(styles, caption_styles=None, vibe_hint: str | None = None) -> str:
-    style_names = [s for s in styles]
+    style_names = [s for s in styles if s != "natural"]      # "natural" = auto, never a judge pick
     style_lines = "\n".join(
         f'- "{s}": {STYLE_GUIDE.get(s, "a distinct look; use only when it clearly fits")}'
         for s in style_names)

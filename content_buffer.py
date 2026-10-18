@@ -446,7 +446,8 @@ class ContentBuffer:
 
     def prepare_ready_job(self, asset_id, caption, hashtags, vibe="natural",
                           sizes=("post", "story"), *, style=None, overlay=None,
-                          text_style="minimal", timeout=150) -> dict:
+                          text_style="minimal", timeout=150, tags=None, faces=None,
+                          text_required=False, seed=None) -> dict:
         """Same contract as prepare_ready(), but the rendering runs in the worker.
 
         This process only enqueues a `prepare_ready` job (no Pillow/numpy work)
@@ -466,7 +467,8 @@ class ContentBuffer:
         job_id = open_job["_id"] if open_job else jobs.enqueue(db, "prepare_ready", {
             "asset_id": asset_id, "caption": caption, "hashtags": list(hashtags),
             "vibe": vibe, "sizes": list(sizes), "style": style,
-            "overlay": overlay, "text_style": text_style,
+            "overlay": overlay, "text_style": text_style, "tags": tags, "faces": faces,
+            "text_required": bool(text_required), "seed": seed,
         }, asset_id=asset_id)
         jobs.wait(db, job_id, timeout=timeout)
         return self.assets.find_one({"_id": asset_id})

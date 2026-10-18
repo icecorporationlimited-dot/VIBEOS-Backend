@@ -20,7 +20,9 @@ _users = _db["users"]
 client = _client
 db = _db
 
-VALID_STYLES = {"natural", "baddie", "soft", "moody", "golden", "clean", "film"}
+VALID_STYLES = {"natural", "y2k", "moody", "film", "clean", "golden", "mono",
+                # legacy names still accepted (editor resolves them)
+                "baddie", "soft"}
 DEFAULT_STYLE = "baddie"
 
 

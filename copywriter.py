@@ -124,7 +124,8 @@ def hook_of(caption: str) -> str:
 
 def build_prompt(*, mode: str, vibe: str, language: str = "english",
                  trend_context: str | None = None,
-                 recent_captions: list[str] | None = None) -> str:
+                 recent_captions: list[str] | None = None,
+                 overlay_required: bool = False) -> str:
     style = CAPTION_STYLES.get(mode) or CAPTION_STYLES.get(vibe) or CAPTION_STYLES["natural"]
     lang = LANGUAGES.get(language, LANGUAGES["english"])
     recent = [c.strip().replace("\n", " ")[:140] for c in (recent_captions or []) if c and c.strip()][:8]
@@ -132,6 +133,12 @@ def build_prompt(*, mode: str, vibe: str, language: str = "english",
         "Captions already used recently (do NOT reuse their wording, opening words "
         "or structure):\n" + "\n".join(f"- {c}" for c in recent)
         if recent else "No recent captions to avoid."
+    )
+    overlay_rule = (
+        "Overlay rules: text on the photo is REQUIRED for this post. A punchy 3-6 word line, lowercase, "
+        "no emoji, no hashtags, no quotation marks, in the same language as the caption."
+        if overlay_required else
+        'Overlay rules: do NOT put text on the photo. Always return "overlay": "" (an empty string).'
     )
     return f"""You are the caption writer for a top Instagram creator. You write like a real person, never like an ad.
 
@@ -163,13 +170,13 @@ Hashtag rules (Instagram allows MAX 5, so each one must earn its place):
 - Lowercase letters and numbers only. No generic spam like #love #instagood #fyp #viral #photooftheday #explore #follow.
 - No tag that only repeats a caption word without adding meaning. Never invent events, festivals or locations.
 
-Overlay rules: a punchy 3-6 word line to print on the photo, lowercase, no emoji, no hashtags, no quotation marks, in the same language as the caption.
+{overlay_rule}
 
 Return ONLY valid JSON, nothing else:
 {{
   "visual_notes": "3-4 short concrete details you noticed",
   "caption": "the caption",
-  "overlay": "short line for the photo",
+  "overlay": "",
   "hashtags": ["#one", "#two", "#three", "#four", "#five"]
 }}"""
 

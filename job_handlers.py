@@ -32,9 +32,11 @@ def handle_edit(job, db):
     from editor import edit_photo
     p = job["payload"]
     data = jobs.get_blob(db, p["in_blob"])
+    text = (p.get("text") or None) if p.get("text_required") else None   # no text unless required
     out, report = edit_photo(
-        data, p.get("style", "natural"), p.get("size", "post"), p.get("text") or None,
-        p.get("text_style", "minimal"), p.get("text_position", "bottom"), True)
+        data, p.get("style", "natural"), p.get("size", "post"), text,
+        p.get("text_style", "minimal"), p.get("text_position", "bottom"), True,
+        tags=p.get("tags"), faces=p.get("faces"), seed=p.get("seed"))
     blob_id = jobs.put_blob(db, out.getvalue(), filename=f"edit_{job['_id'][:8]}.jpg")
     jobs.delete_blob(db, p["in_blob"])
     return {"blob_id": blob_id, "report": {k: str(v)[:60] for k, v in (report or {}).items()}}
@@ -55,10 +57,13 @@ def handle_prepare_ready(job, db):
     edit_fn = None                                  # None -> adaptive photo engine
     if p.get("style"):
         from editor import edit_photo
-        style, overlay, text_style = p["style"], p.get("overlay") or None, p.get("text_style", "minimal")
+        style, text_style = p["style"], p.get("text_style", "minimal")
+        # text only when the planner marked it required (festival greeting, announcement...)
+        overlay = (p.get("overlay") or None) if p.get("text_required") else None
+        tags, faces, seed = p.get("tags"), p.get("faces"), p.get("seed") or p["asset_id"]
 
         def edit_fn(data, _vibe, size):
-            return edit_photo(data, style, size, overlay, text_style)
+            return edit_photo(data, style, size, overlay, text_style, tags=tags, faces=faces, seed=seed)
 
     buf.prepare_ready(p["asset_id"], p.get("caption", ""), p.get("hashtags") or [],
                       p.get("vibe", "natural"), tuple(p.get("sizes") or ("post", "story")), edit_fn)

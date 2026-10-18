@@ -133,8 +133,8 @@ def check_names():
     """Fail fast if media_names.py (used by the web service) drifted from editor.py."""
     import editor
     import media_names
-    if tuple(editor.STYLES) != media_names.STYLES or tuple(editor.SIZES) != media_names.SIZES:
-        raise SystemExit("media_names.py is out of sync with editor.STYLES/SIZES — update it.")
+    if tuple(editor.STYLE_NAMES) != media_names.STYLES or tuple(editor.SIZES) != media_names.SIZES:
+        raise SystemExit("media_names.py is out of sync with editor.STYLE_NAMES/SIZES — update it.")
 
 
 def _start_health_server():

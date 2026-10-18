@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-VALID_VIBES = {"baddie", "soft", "moody", "natural"}
+VALID_VIBES = {"natural", "y2k", "moody", "film", "clean", "golden", "mono", "baddie", "soft"}
 # Format-routing hint only; this must never decide whether a photo is accepted.
 MIN_CAROUSEL_QUALITY = 0.35
 

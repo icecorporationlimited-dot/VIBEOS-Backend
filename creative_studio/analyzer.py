@@ -87,7 +87,7 @@ def analyze_photo(image_bytes: bytes) -> dict[str, Any]:
 def build_edit_plan(analysis: dict[str, Any], vibe: str = "natural") -> dict[str, Any]:
     """Build a bounded correction plan; avoid trying to 'fix' every image hard."""
     vibe = vibe.lower().strip()
-    if vibe not in {"natural", "baddie", "soft", "moody"}:
+    if vibe not in {"natural", "y2k", "moody", "film", "clean", "golden", "mono", "baddie", "soft"}:
         vibe = "natural"
 
     brightness = float(analysis.get("brightness", 0.5))
@@ -100,12 +100,12 @@ def build_edit_plan(analysis: dict[str, Any], vibe: str = "natural") -> dict[str
     contrast_delta = max(-0.08, min(0.10, (0.20 - contrast) * 0.35))
     saturation_multiplier = max(0.90, min(1.12, 1.04 if saturation < 0.12 else 1.0))
 
-    if vibe == "soft":
+    if vibe in ("soft", "film"):
         contrast_delta = min(contrast_delta, 0.025)
         saturation_multiplier = min(saturation_multiplier, 1.02)
     elif vibe == "moody":
         contrast_delta = max(contrast_delta, 0.025)
-    elif vibe == "baddie":
+    elif vibe in ("baddie", "y2k"):
         contrast_delta = max(contrast_delta, 0.015)
         saturation_multiplier = min(1.08, max(1.02, saturation_multiplier))
 

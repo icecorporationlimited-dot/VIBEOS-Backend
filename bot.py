@@ -175,6 +175,7 @@ async def edit_via_worker(data, style, size="post", text=None,
     blob_id = await asyncio.to_thread(jobs.put_blob, db, data, "edit_in.jpg")
     res = await jobs.run_async(db, "edit", {
         "in_blob": blob_id, "style": style, "size": size, "text": text,
+        "text_required": bool(text),      # bot only passes text when the user turned it on
         "text_style": text_style, "text_position": text_position,
     }, timeout=EDIT_JOB_TIMEOUT)
     out = await asyncio.to_thread(jobs.get_blob, db, res["blob_id"])
@@ -210,7 +211,7 @@ def render_settings(doc):
     return {
         "size": doc.get("render_size", "post"),
         "text_style": doc.get("text_style", "minimal"),
-        "show_text": doc.get("show_text", True),
+        "show_text": doc.get("show_text", False),
     }
 
 
@@ -271,7 +272,7 @@ def format_preview_caption(doc):
         f"🪄 Filter: {style}\n"
         f"📐 {'Story 9:16' if doc.get('render_size') == 'story' else 'Post 4:5'}"
         f" | 🔤 {doc.get('text_style', 'minimal')}"
-        f"{'' if doc.get('show_text', True) else ' (off)'}\n\n"
+        f"{'' if doc.get('show_text', False) else ' (off)'}\n\n"
         f"💬 {caption}\n\n"
         f"{' '.join(hashtags)}\n\n"
         "Regenerate your caption, edit hashtags, or approve."
@@ -985,7 +986,7 @@ async def send_preview(
         "overlay": overlay,
         "render_size": "post",
         "text_style": "minimal",
-        "show_text": True,
+        "show_text": False,
         "status": "preview_ready",
         "created_at": now_utc(),
     })
@@ -1000,7 +1001,7 @@ async def send_preview(
         "hashtags": social_copy["hashtags"],
         "render_size": "post",
         "text_style": "minimal",
-        "show_text": True,
+        "show_text": False,
         "status": "preview_ready",
     })
     for attempt in range(3):  # mobile networks drop connections (httpx.ReadError)
@@ -1735,7 +1736,7 @@ async def button_handler(update, context):
             style = (doc.get("analysis") or {}).get(
                 "filter", doc.get("vibe", DEFAULT_VIBE)
             )
-            overlay = doc.get("overlay") if doc.get("show_text", True) else None
+            overlay = doc.get("overlay") if doc.get("show_text", False) else None
             text_style = doc.get("text_style", "minimal")
 
             try:
