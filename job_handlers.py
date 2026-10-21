@@ -26,48 +26,119 @@ def _principal(p: dict):
     return Principal(p["kind"], p["subject"])
 
 
+# ------------------------------------------------------------------ automatic output framing
+def _choose_output_size(image_bytes: bytes) -> str:
+    """Choose one Instagram format from the source aspect ratio; no user choice needed."""
+    from PIL import Image, ImageOps
+    import io
+    with Image.open(io.BytesIO(image_bytes)) as source:
+        image = ImageOps.exif_transpose(source)
+        width, height = image.size
+    if not width or not height:
+        return "post"
+    ratio = width / height
+    if ratio < 0.645:             # already close to a 9:16 story frame
+        return "story"
+    if 0.94 <= ratio <= 1.06:     # preserve near-square compositions
+        return "square"
+    return "post"                 # default polished 4:5 Instagram feed canvas
+
+
+# ------------------------------------------------------------------ automatic style decision
+def _choose_automatic_style(image_bytes: bytes) -> tuple[str, dict]:
+    """Choose one internal style. Tagger failure safely falls back to editor auto mode."""
+    diagnostic = {"style_source": "builtin_fallback"}
+    try:
+        from tagger_client import tag_photo
+        from media_names import resolve_style
+        tagged = tag_photo(image_bytes)
+        if tagged:
+            confidence = int(tagged.get("style_confidence") or 0)
+            chosen = resolve_style(tagged.get("style"), "natural")
+            diagnostic.update({
+                "style_source": "tagger" if chosen != "natural" else "tagger_fallback",
+                "style_confidence": confidence,
+                "style_label": str(tagged.get("style_label") or "")[:80],
+                "style_low_confidence": bool(tagged.get("low_confidence", True)),
+            })
+            if chosen != "natural" and not tagged.get("low_confidence", True) and confidence >= 45:
+                diagnostic["style_id"] = chosen
+                if isinstance(tagged.get("edit"), dict):
+                    diagnostic["tagger_edit_plan"] = tagged["edit"]
+                    diagnostic["adaptive_plan"] = tagged["edit"]
+                return chosen, diagnostic
+    except Exception:
+        logger.warning("Automatic style tagger unavailable; using built-in auto selection", exc_info=True)
+    diagnostic["style_id"] = "natural"
+    return "natural", diagnostic
+
+
 # ------------------------------------------------------------------ edit
 def handle_edit(job, db):
-    """Free-standing photo edit (web /api/edit, Telegram previews)."""
+    """Automatic photo edit: internally choose a look and return one final image."""
     from editor import edit_photo
     p = job["payload"]
     data = jobs.get_blob(db, p["in_blob"])
-    text = (p.get("text") or None) if p.get("text_required") else None   # no text unless required
+    text = (p.get("text") or None) if p.get("text_required") else None
+
+    # Consumer uploads default to automatic style selection. Trusted internal
+    # callers may set force_style=True for a deliberate non-user-facing render.
+    if p.get("force_style"):
+        style = p.get("style", "natural")
+        style_diagnostic = {"style_source": "internal_override", "style_id": style}
+    else:
+        style, style_diagnostic = _choose_automatic_style(data)
+
+    output_size = _choose_output_size(data) if p.get("size", "auto") == "auto" else p.get("size", "post")
     out, report = edit_photo(
-        data, p.get("style", "natural"), p.get("size", "post"), text,
+        data, style, output_size, text,
         p.get("text_style", "minimal"), p.get("text_position", "bottom"), True,
-        tags=p.get("tags"), faces=p.get("faces"), seed=p.get("seed"))
+        tags=p.get("tags"), faces=p.get("faces"), seed=p.get("seed"),
+        adaptive_plan=style_diagnostic.get("adaptive_plan"))
+    report = dict(report or {})
+    report.update(style_diagnostic)
+    report["output_size"] = output_size
     blob_id = jobs.put_blob(db, out.getvalue(), filename=f"edit_{job['_id'][:8]}.jpg")
     jobs.delete_blob(db, p["in_blob"])
-    return {"blob_id": blob_id, "report": {k: str(v)[:60] for k, v in (report or {}).items()}}
+    return {"blob_id": blob_id, "report": {k: str(v)[:160] for k, v in report.items()}}
 
 
 # ------------------------------------------------------------------ prepare_ready
 def handle_prepare_ready(job, db):
-    """selected -> ready: render post/story variants for one asset."""
+    """selected -> ready: render post/story variants with an automatic per-photo look."""
     from content_buffer import READY
+    from editor import edit_photo
     p = job["payload"]
     buf = _buffer(db)
     asset = buf.assets.find_one({"_id": p["asset_id"]})
     if asset is None:
         raise KeyError(f"unknown asset {p['asset_id']}")
-    if asset["status"] == READY:                    # retry after a lost result: already done
+    if asset["status"] == READY:
         return {"already_ready": True}
 
-    edit_fn = None                                  # None -> adaptive photo engine
-    if p.get("style"):
-        from editor import edit_photo
-        style, text_style = p["style"], p.get("text_style", "minimal")
-        # text only when the planner marked it required (festival greeting, announcement...)
-        overlay = (p.get("overlay") or None) if p.get("text_required") else None
-        tags, faces, seed = p.get("tags"), p.get("faces"), p.get("seed") or p["asset_id"]
+    # Choose once from the original, then reuse the same look for every output size.
+    original = buf.get_media(p["asset_id"])
+    if p.get("force_style"):
+        style = p.get("style", "natural")
+        style_diagnostic = {"style_source": "internal_override", "style_id": style}
+    else:
+        style, style_diagnostic = _choose_automatic_style(original)
 
-        def edit_fn(data, _vibe, size):
-            return edit_photo(data, style, size, overlay, text_style, tags=tags, faces=faces, seed=seed)
+    overlay = (p.get("overlay") or None) if p.get("text_required") else None
+    tags, faces, seed = p.get("tags"), p.get("faces"), p.get("seed") or p["asset_id"]
+
+    def edit_fn(data, _vibe, size):
+        rendered, _report = edit_photo(
+            data, style, size, overlay, p.get("text_style", "minimal"),
+            p.get("text_position", "bottom"), True,
+            tags=tags, faces=faces, seed=seed,
+            adaptive_plan=style_diagnostic.get("adaptive_plan"))
+        return rendered
 
     buf.prepare_ready(p["asset_id"], p.get("caption", ""), p.get("hashtags") or [],
                       p.get("vibe", "natural"), tuple(p.get("sizes") or ("post", "story")), edit_fn)
-    return {"asset_id": p["asset_id"]}
+    return {"asset_id": p["asset_id"], "style": style,
+            "style_source": style_diagnostic.get("style_source", "builtin_fallback")}
 
 
 # ------------------------------------------------------------------ reel

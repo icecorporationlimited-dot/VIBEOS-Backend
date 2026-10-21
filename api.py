@@ -115,8 +115,9 @@ def health():
 def options(x_api_key: str | None = Header(default=None)):
     _check_key(x_api_key)
     return {
-        "styles": list(STYLES),
-        "sizes": list(SIZES) + ["original"],
+        "styles": ["automatic"],
+        "editing_mode": "automatic",
+        "sizes": ["automatic"],
         "text_styles": TEXT_STYLES,
         "text_positions": TEXT_POSITIONS,
         "caption_styles": list(copywriter.CAPTION_STYLES),
@@ -135,18 +136,16 @@ async def api_edit(
     x_api_key: str | None = Header(default=None),
 ):
     _check_key(x_api_key)
-    if style not in STYLES:
-        raise HTTPException(400, f"style must be one of {list(STYLES)}")
-    if size not in list(SIZES) + ["original"]:
-        raise HTTPException(400, "invalid size")
+    # Style and output framing are intentionally not user-selectable.
     if text_style not in TEXT_STYLES or text_position not in TEXT_POSITIONS:
         raise HTTPException(400, "invalid text_style or text_position")
     data = await _read_image(file)
     db = _db()
     in_blob = await asyncio.to_thread(jobs.put_blob, db, data, "api_edit.jpg")
     job_id = await asyncio.to_thread(jobs.enqueue, db, "edit", {
-        "in_blob": in_blob, "style": style, "size": size, "text": text.strip()[:80] or None,
-        "text_required": bool(text.strip()),       # typed by the user = explicit
+        "in_blob": in_blob, "style": "natural", "auto_style": True,
+        "size": "auto", "text": text.strip()[:80] or None,
+        "text_required": bool(text.strip()),       # text only when explicitly provided
         "text_style": text_style, "text_position": text_position,
     })
     try:

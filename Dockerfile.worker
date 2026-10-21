@@ -16,9 +16,6 @@ RUN pip install --no-cache-dir -r requirements-worker.txt
 
 COPY . .
 
-# Small ONNX models for vision_onnx.py (soft-fails: editor falls back to heuristics)
-RUN python tools/fetch_models.py || true
-
 RUN useradd --create-home --uid 10001 vibeos && chown -R vibeos:vibeos /app
 USER vibeos
 

@@ -23,6 +23,10 @@ services:
         generateValue: true
       - key: VISION_MODEL
         value: qwen/qwen3.8-27b
+      - key: TAGGER_URL
+        sync: false
+      - key: TAGGER_API_KEY
+        sync: false
       - key: WEB_PUBLISHING      # 1 = post for web dashboard users (test with your own account first)
         value: "0"
 

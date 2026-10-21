@@ -11,6 +11,10 @@ services:
     envVars:
       - key: MONGODB_URI        # SAME value in all 3 accounts + main web service
         sync: false
+      - key: TAGGER_URL
+        sync: false
+      - key: TAGGER_API_KEY
+        sync: false
       - key: JOB_TYPES
         value: prepare_ready,edit
 

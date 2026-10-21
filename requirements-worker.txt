@@ -9,4 +9,4 @@ requests
 cryptography
 PyJWT[crypto]>=2.8,<3
 tzdata
-onnxruntime
+httpx
