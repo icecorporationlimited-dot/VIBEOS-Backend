@@ -14,6 +14,8 @@ Pipeline (all heavy work happens at the OUTPUT size, never at 12 MP):
   5. finish   clarity, bloom, vignette, grain, sharpening
   6. text     ONLY when `text` is given; placed away from faces
 
+Faces + subject mask: vision_onnx.py (optional ONNX; falls back to the old heuristics).
+
 Memory: ~120-180 MB peak for a 12 MP phone photo -> 1080x1350 (measured, see
 tests/test_editor_memory.py); Pillow + NumPy only. OpenCV is optional.
 
@@ -36,6 +38,11 @@ try:  # optional: local face detection when the tagger sends no face boxes
     import cv2  # type: ignore
 except Exception:  # pragma: no cover
     cv2 = None
+
+try:  # optional: small ONNX face + subject models (vision_onnx.py); every failure -> fallback
+    import vision_onnx
+except Exception:  # pragma: no cover
+    vision_onnx = None
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 
@@ -624,6 +631,17 @@ def _subject_mask(size, faces, pt):
     return _up(m, (tw, th))
 
 
+def _merge_faces(mask, faces):
+    """A person mask must never have holes over known faces."""
+    h, w = mask.shape
+    for x, y, fw, fh in faces:
+        x0, x1 = int(x * w), int((x + fw) * w)
+        y0, y1 = int(y * h), int((y + fh) * h)
+        if x1 > x0 and y1 > y0:
+            view = mask[y0:y1, x0:x1]
+            np.maximum(view, 0.9, out=view)
+
+
 def _flash(a, mask, k):
     """Direct-flash look: subject lifted, background falls off into shadow."""
     gain = 1 + 0.20 * k * mask - 0.36 * k * (1 - mask)
@@ -755,7 +773,7 @@ def _chromatic(a, px):
     a[:, :-s, 2] = blue
 
 
-def _style_pass(img, style, tweaks, faces, pt, rng, report):
+def _style_pass(img, style, tweaks, faces, pt, rng, report, subject=None):
     """The whole fix -> grade -> finish chain on one image. Returns a PIL image."""
     base = STYLES[style]
     noise = _estimate_noise(img)
@@ -779,9 +797,13 @@ def _style_pass(img, style, tweaks, faces, pt, rng, report):
         _levels(a, p["levels"])
 
     skin = _skin_full(a)
+    if subject is not None and subject.shape != a.shape[:2]:
+        subject = None                                   # size mismatch: ignore, use heuristics
+    if subject is not None:                              # skin only where a person really is
+        skin *= np.clip(subject * 1.4, 0.0, 1.0)
     mask = None
     if p.get("flash") or p.get("separation"):
-        mask = _subject_mask((a.shape[1], a.shape[0]), faces, pt)
+        mask = subject if subject is not None else _subject_mask((a.shape[1], a.shape[0]), faces, pt)
 
     a *= p["exposure"]
     np.clip(a, 0, 1, out=a)
@@ -1003,6 +1025,10 @@ def edit_photo(
     report = {}
     img = _load(image_bytes, size)
     faces = _clean_faces(faces)
+    if not faces and vision_onnx is not None:
+        faces = _clean_faces(vision_onnx.detect_faces(img))
+        if faces:
+            report["face_src"] = "onnx"
     if not faces and cv2 is not None:
         faces = _detect_faces_cv(img)
 
@@ -1037,7 +1063,17 @@ def edit_photo(
     if requested not in STYLES:
         requested = "clean"
 
-    img = _style_pass(img, requested, tweaks, faces, pt, rng, report)
+    subject = None
+    if vision_onnx is not None:
+        sp = STYLES[requested]
+        if sp.get("flash") or sp.get("separation") or skin > 0.03:
+            subject = vision_onnx.segment_subject(img, img.size)
+            if subject is not None:
+                _merge_faces(subject, faces)
+                report["subject"] = "onnx"
+
+    img = _style_pass(img, requested, tweaks, faces, pt, rng, report, subject)
+    del subject
     gc.collect()
 
     if text:

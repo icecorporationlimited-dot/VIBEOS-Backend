@@ -115,16 +115,7 @@ class AutopilotStore:
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
     def ensure_indexes(self):
-        # telegram_id must be unique but SPARSE: web owners have no telegram_id, and a
-        # plain unique index treats "missing" as null, so the 2nd web user's insert
-        # fails with E11000 (shows up as "Something went wrong" when turning Autopilot on).
-        try:
-            for name, info in self.col.index_information().items():
-                if info.get("key") == [("telegram_id", 1)] and not info.get("sparse"):
-                    self.col.drop_index(name)
-        except Exception:
-            pass
-        self.col.create_index("telegram_id", unique=True, sparse=True)
+        self.col.create_index("telegram_id", unique=True)
         self.col.create_index("owner_id", unique=True, sparse=True)
 
     def _find_doc(self, principal):
