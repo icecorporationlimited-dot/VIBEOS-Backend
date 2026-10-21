@@ -115,7 +115,17 @@ class AutopilotStore:
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
     def ensure_indexes(self):
-        self.col.create_index("telegram_id", unique=True)
+        # Web-owned docs have no telegram_id, so the unique index must be sparse.
+        # A deployed DB may hold either the old non-sparse index or the sparse
+        # one; re-creating with different options under the same name raises
+        # IndexKeySpecsConflict (code 86) and crashes startup. Drop only the
+        # non-sparse variant, then create the sparse one (a no-op if present).
+        if hasattr(self.col, "list_indexes"):
+            for index in list(self.col.list_indexes()):
+                if (dict(index.get("key", {})) == {"telegram_id": 1}
+                        and index.get("unique") and not index.get("sparse")):
+                    self.col.drop_index(index["name"])
+        self.col.create_index("telegram_id", unique=True, sparse=True)
         self.col.create_index("owner_id", unique=True, sparse=True)
 
     def _find_doc(self, principal):
