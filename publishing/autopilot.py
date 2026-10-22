@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timezone
 
 from .identity import Principal, document_principal, owner_filter
+from .indexes import ensure_index
 
 FORMATS = ("photo", "story", "carousel", "reel")
 DEFAULTS = {
@@ -115,8 +116,11 @@ class AutopilotStore:
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
     def ensure_indexes(self):
-        self.col.create_index("telegram_id", unique=True)
-        self.col.create_index("owner_id", unique=True, sparse=True)
+        # Sparse: web users have no telegram_id, and a plain unique index would let
+        # only ONE such document exist (every missing value counts as null).
+        # ensure_index also repairs an older non-sparse definition instead of crashing.
+        ensure_index(self.col, "telegram_id", unique=True, sparse=True)
+        ensure_index(self.col, "owner_id", unique=True, sparse=True)
 
     def _find_doc(self, principal):
         return self.col.find_one(owner_filter(principal))
