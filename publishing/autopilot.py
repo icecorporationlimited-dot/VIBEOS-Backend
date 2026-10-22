@@ -115,7 +115,11 @@ class AutopilotStore:
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
     def ensure_indexes(self):
-        self.col.create_index("telegram_id", unique=True)
+        for index in list(self.col.list_indexes()):
+        if (dict(index.get("key", {})) == {"telegram_id": 1}
+                and index.get("unique") and not index.get("sparse")):
+            self.col.drop_index(index["name"])
+        self.col.create_index("telegram_id", unique=True, sparse=True)
         self.col.create_index("owner_id", unique=True, sparse=True)
 
     def _find_doc(self, principal):
