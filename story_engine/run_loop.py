@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 
 from memory import db
-from story_engine import db as se, rank, context, writer, visuals, layouts, quality, render, mongo_store
+from story_engine import db as se, rank, context, writer, visuals, layouts, quality, render, mongo_store, vision
 from story_engine.discovery import run
 
 log = logging.getLogger("story_engine.loop")
@@ -47,6 +47,22 @@ def build_llm():
                         getattr(settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
 
 
+_vision = None
+_vision_built = False
+
+
+def get_vision():
+    """Vision callable for step 9 (built once per process); None if no key is set -> photo stories stay pending."""
+    global _vision, _vision_built
+    if not _vision_built:
+        _vision, _vision_built = vision.build(), True
+        if _vision is None:
+            log.warning("no vision model configured (OPENROUTER_API_KEY / GROQ_API_KEY): photo stories cannot pass quality")
+        else:
+            log.info("vision for quality check: %s / %s", _vision.provider, _vision.model)
+    return _vision
+
+
 def run_once(llm):
     """Ek poora pass. Har step apne aap me guard hai: ek fail ho to baaki chalte hain."""
     steps = [
@@ -68,7 +84,7 @@ def run_once(llm):
     except Exception:
         log.exception("render failed")
     try:
-        log.info("quality -> %s", quality.process(db, llm=llm))   # sirf yahin se quality_status="ready"
+        log.info("quality -> %s", quality.process(db, llm=llm, vision=get_vision()))   # sirf yahin se quality_status="ready"
     except Exception:
         log.exception("quality failed")
     try:
