@@ -222,6 +222,12 @@ class Worker:
                 continue
             if self.service.cancel(job["_id"], principal):
                 logger.info("Trend Story %s expired before posting; cancelled", job["_id"][:6])
+        story_db = getattr(self, "story_db", None)       # story_engine library jobs (step 11)
+        if story_db is not None:
+            from story_engine.publishing_integration import cancel_expired_story_jobs
+            n = cancel_expired_story_jobs(story_db, self.service.jobs, now)
+            if n:
+                logger.info("Cancelled %d story-library job(s) whose trend expired", n)
 
     def _trend_stories(self):
         from trends import auto_story
