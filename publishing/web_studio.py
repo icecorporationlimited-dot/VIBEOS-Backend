@@ -16,7 +16,7 @@ import io
 import json
 import logging
 import uuid
-from datetime import timezone
+from datetime import datetime, timezone
 from email.parser import BytesParser
 from email.policy import default as email_policy
 
@@ -104,7 +104,8 @@ def _parse_files(content_type, raw):
 
 class WebStudio:
     def __init__(self, cfg, sessions, buffer, autopilot, accounts=None,
-                 service=None, ingest=None, posting_engine=False, planner=None):
+                 service=None, ingest=None, posting_engine=False, planner=None, story_db=None):
+        self.story_db = story_db        # main Mongo db holding the story library (se_* collections) or None
         self.cfg, self.sessions, self.buffer = cfg, sessions, buffer
         self.autopilot, self.accounts = autopilot, accounts
         self.service, self.ingest = service, ingest
@@ -335,6 +336,35 @@ class WebStudio:
         if not self.buffer.delete_asset(principal, asset_id):
             return _err(404, "Photo not found.")
         return _json(200, {"ok": True})
+
+    # ---- story library -> publishing queue (story_engine step 11) -----------------
+    def queue_story(self, cookie_header, headers, body):
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        if self.story_db is None or self.service is None:
+            return _err(503, "Story publishing is not available.")
+        try:
+            data = json.loads(body or b"{}")
+            asset_id = str(data.get("story_asset_id") or "")
+            if not asset_id.isalnum() or len(asset_id) > 64:
+                return _err(400, "Invalid story.")
+            when = None
+            if data.get("scheduled_at"):
+                when = datetime.fromisoformat(str(data["scheduled_at"]).replace("Z", "+00:00"))
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError, TypeError):
+            return _err(400, "Invalid request.")
+        from story_engine.publishing_integration import StoryPublishError, queue_story
+        try:
+            out = queue_story(self.story_db, self.buffer, self.service, principal, asset_id, when)
+        except StoryPublishError as exc:
+            return _err(409, str(exc))
+        except Exception:
+            logger.exception("Story queue failed")
+            return _err(500, "Could not queue this story.")
+        return _json(201 if not out["duplicate"] else 200, {"ok": True, **out})
 
     # ---- autopilot ----------------------------------------------------------
     def set_autopilot(self, cookie_header, headers, body):
