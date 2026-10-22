@@ -51,10 +51,9 @@ def _start():
     threading.Thread(target=_loop, name="se-loop", daemon=True).start()
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def healthz():
     return {"ok": True}
-
 
 @app.post("/run")
 def run_now(x_secret: str = Header(default="")):

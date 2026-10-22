@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 
 from memory import db
-from story_engine import db as se, rank, context, writer, visuals, layouts, quality, render
+from story_engine import db as se, rank, context, writer, visuals, layouts, quality, render, mongo_store
 from story_engine.discovery import run
 
 log = logging.getLogger("story_engine.loop")
@@ -64,13 +64,17 @@ def run_once(llm):
             log.exception("step %s failed; continuing", name)
     try:
         with render.PlaywrightRenderer() as r:
-            log.info("render -> %s", render.process(db, r, render.R2Uploader()))
+            log.info("render -> %s", render.process(db, r, mongo_store.MongoUploader(db)))
     except Exception:
         log.exception("render failed")
     try:
         log.info("quality -> %s", quality.process(db, llm=llm))   # sirf yahin se quality_status="ready"
     except Exception:
         log.exception("quality failed")
+    try:
+        log.info("purge -> %s old assets removed", mongo_store.purge(db, hours=48))
+    except Exception:
+        log.exception("purge failed")
 
 
 def main():
