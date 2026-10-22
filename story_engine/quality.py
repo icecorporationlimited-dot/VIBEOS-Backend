@@ -17,6 +17,14 @@ from .visuals import REQUIRED, license_ok
 
 log = logging.getLogger(__name__)
 
+# A reason starting with RETRY is an infrastructure problem (no vision key, provider down, network blip), not a
+# verdict on the story. Such assets stay "pending" and are checked again next pass instead of being rejected
+# for good. Only a missing vision model is not counted as an attempt (it is a config problem, not the asset's).
+RETRY = "retry: "
+NO_VISION = RETRY + "no vision model configured (set OPENROUTER_API_KEY or GROQ_API_KEY)"
+MAX_ATTEMPTS = 3
+MAX_IMAGE_BYTES = 12 * 1024 * 1024
+
 RELEVANCE_PROMPT = (
     "Headline: {title}\nDoes this photo suit a social story about this headline? It must not mislead (wrong event, "
     "wrong people, unrelated subject) and must not look disturbing or inappropriate next to the text. "
@@ -61,11 +69,13 @@ def check_overflow(asset, layout) -> list:
 def _fetch(http, url):
     if http is None:
         import requests as http
-    r = http.get(url, timeout=15)
+    r = http.get(url, timeout=15, headers={"User-Agent": cfg.HTTP_UA})    # Wikimedia refuses the default UA
     r.raise_for_status()
     ctype = (r.headers.get("Content-Type") or "").lower()
     if not ctype.startswith("image/"):
         raise ValueError(f"not an image: {ctype}")
+    if len(r.content) > MAX_IMAGE_BYTES:
+        raise ValueError("image too large")
     return r.content
 
 
@@ -84,17 +94,22 @@ def check_image(asset, trend, http=None, vision=None) -> list:
         return bad
     try:
         data = _fetch(http, img["image_url"])          # also proves the photo still loads
-    except Exception as exc:
-        return [f"image does not load: {type(exc).__name__}"]
+    except ValueError as exc:                          # served something that is not a usable image: final
+        return [f"image does not load: {exc}"]
+    except Exception as exc:                           # network / HTTP error: may be temporary
+        return [f"{RETRY}image does not load: {type(exc).__name__}"]
     if not vision:
-        return ["image relevance unchecked (no vision model)"] if cfg.QC_REQUIRE_VISION else []
+        return [NO_VISION] if cfg.QC_REQUIRE_VISION else []
     try:
         res = vision(RELEVANCE_PROMPT.format(title=trend["title"]), base64.b64encode(data).decode(), 0)
         if isinstance(res, str):
             res = json.loads(res)
+        relevant, reason = res.get("relevant"), str(res.get("reason", ""))[:60]
     except Exception:
-        return ["image relevance check failed"]
-    return [] if res.get("relevant") is True else [f"image not relevant: {str(res.get('reason', ''))[:60]}"]
+        return [f"{RETRY}image relevance check failed"]
+    if relevant is True or str(relevant).strip().lower() == "true":     # some models answer "true" as text
+        return []
+    return [f"image not relevant: {reason}"]
 
 
 def check_duplicates(db, asset, now=None) -> list:
@@ -124,18 +139,32 @@ def evaluate(db, asset, llm=None, vision=None, http=None) -> list:
 
 
 def process(db, llm=None, vision=None, http=None, limit=None) -> dict:
-    stats = {"ready": 0, "rejected": 0}
+    """pending -> ready | rejected, or stays pending when the only problem is temporary (see RETRY)."""
+    stats = {"ready": 0, "rejected": 0, "retry": 0}
     rows = db[ASSETS].find({"quality_status": "pending", "rendered_image_url": {"$ne": None}})
     for a in list(rows)[: limit or cfg.QC_BATCH]:
+        now = datetime.now(timezone.utc)
         try:
             reasons = evaluate(db, a, llm, vision, http)
         except Exception:
             log.exception("quality check crashed for %s", a.get("_id"))
             reasons = ["quality check crashed"]
+        if reasons and all(r.startswith(RETRY) for r in reasons):
+            config_issue = reasons == [NO_VISION]
+            attempts = a.get("quality_attempts", 0) + (0 if config_issue else 1)
+            if config_issue:
+                log.warning("quality: %s; photo stories stay pending", NO_VISION[len(RETRY):])
+            if config_issue or attempts < MAX_ATTEMPTS:
+                db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {
+                    "quality_attempts": attempts, "quality_reasons": reasons, "quality_checked_at": now}})
+                stats["retry"] += 1
+                continue
+            reasons = reasons + [f"gave up after {MAX_ATTEMPTS} attempts"]
+        reasons = [r[len(RETRY):] if r.startswith(RETRY) else r for r in reasons]
         ok = not reasons
         db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {
             "quality_status": "ready" if ok else "rejected", "quality_reasons": reasons,
-            "quality_checked_at": datetime.now(timezone.utc)}})
+            "quality_checked_at": now}})
         stats["ready" if ok else "rejected"] += 1
         if not ok:
             log.info("asset %s rejected: %s", a["_id"], reasons)
