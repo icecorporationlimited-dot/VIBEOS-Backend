@@ -29,6 +29,10 @@ DEFAULT_STYLE = "baddie"
 def ensure_indexes():
     """Create indexes and verify that MongoDB is reachable."""
     _client.admin.command("ping")
+    for index in list(_users.list_indexes()):
+        if (dict(index.get("key", {})) == {"telegram_id": 1}
+                and index.get("unique") and not index.get("sparse")):
+            _users.drop_index(index["name"])
     _users.create_index("telegram_id", unique=True, sparse=True)
 
 
