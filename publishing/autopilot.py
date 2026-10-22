@@ -114,11 +114,13 @@ class AutopilotStore:
         # must pass a Principal created only after session validation.
         return identity if isinstance(identity, Principal) else Principal.from_telegram(identity)
 
-    def ensure_indexes(self):
+        def ensure_indexes(self):
+        # Web-owned docs have no telegram_id, so this unique index must be sparse.
+        # Drop an older non-sparse version once, if present.
         for index in list(self.col.list_indexes()):
-        if (dict(index.get("key", {})) == {"telegram_id": 1}
-                and index.get("unique") and not index.get("sparse")):
-            self.col.drop_index(index["name"])
+            if (dict(index.get("key", {})) == {"telegram_id": 1}
+                    and index.get("unique") and not index.get("sparse")):
+                self.col.drop_index(index["name"])
         self.col.create_index("telegram_id", unique=True, sparse=True)
         self.col.create_index("owner_id", unique=True, sparse=True)
 
