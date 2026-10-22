@@ -61,7 +61,8 @@ class web_studio_limits:            # plain holder so tests can lower the cap
 
 STUDIO_GET = "/web/api/state"
 STUDIO_JSON_POST = {"/web/api/autopilot": "set_autopilot", "/web/api/media/delete": "delete_media",
-                    "/web/api/occasions": "set_occasions"}
+                    "/web/api/occasions": "set_occasions",
+                    "/web/api/story/queue": "queue_story"}
 STUDIO_OCCASIONS = "/web/api/occasions"
 STUDIO_UPLOAD = "/web/api/media"
 JSON_BODY_LIMIT = 16 * 1024
