@@ -44,6 +44,32 @@ def _choose_output_size(image_bytes: bytes) -> str:
     return "post"                 # default polished 4:5 Instagram feed canvas
 
 
+# ------------------------------------------------------------------ tagger content (faces / scene tags)
+def _clean_tagger_faces(raw) -> list:
+    """Tagger faces -> [[x, y, w, h], ...] in 0..1; anything malformed is dropped."""
+    out = []
+    for f in (raw or [])[:8]:
+        try:
+            x, y, w, h = (float(v) for v in f[:4])
+        except Exception:
+            continue
+        if 0 <= x < 1 and 0 <= y < 1 and 0.01 < w <= 1 and 0.01 < h <= 1:
+            out.append([round(x, 4), round(y, 4), round(w, 4), round(h, 4)])
+    return out
+
+
+def _clean_tagger_tags(raw) -> list:
+    return [str(t)[:24] for t in (raw or []) if isinstance(t, str)][:8]
+
+
+def _take_detected(payload: dict, diagnostic: dict):
+    """(tags, faces) for edit_photo. Caller-supplied values win; otherwise the ones the
+    tagger found. Also removes them from the diagnostic so they never reach the report."""
+    tags = diagnostic.pop("_tags", None)
+    faces = diagnostic.pop("_faces", None)
+    return (payload.get("tags") or tags or None), (payload.get("faces") or faces or None)
+
+
 # ------------------------------------------------------------------ automatic style decision
 def _choose_automatic_style(image_bytes: bytes) -> tuple[str, dict]:
     """Choose one internal style. Tagger failure safely falls back to editor auto mode."""
@@ -53,6 +79,10 @@ def _choose_automatic_style(image_bytes: bytes) -> tuple[str, dict]:
         from media_names import resolve_style
         tagged = tag_photo(image_bytes)
         if tagged:
+            # Faces + scene words are useful even when the style itself is low-confidence:
+            # they keep the framing face-safe and let the editor retouch skin.
+            diagnostic["_faces"] = _clean_tagger_faces(tagged.get("faces"))
+            diagnostic["_tags"] = _clean_tagger_tags(tagged.get("tags"))
             confidence = int(tagged.get("style_confidence") or 0)
             chosen = resolve_style(tagged.get("style"), "natural")
             diagnostic.update({
@@ -90,10 +120,11 @@ def handle_edit(job, db):
         style, style_diagnostic = _choose_automatic_style(data)
 
     output_size = _choose_output_size(data) if p.get("size", "auto") == "auto" else p.get("size", "post")
+    tags, faces = _take_detected(p, style_diagnostic)
     out, report = edit_photo(
         data, style, output_size, text,
         p.get("text_style", "minimal"), p.get("text_position", "bottom"), True,
-        tags=p.get("tags"), faces=p.get("faces"), seed=p.get("seed"),
+        tags=tags, faces=faces, seed=p.get("seed"),
         adaptive_plan=style_diagnostic.get("adaptive_plan"))
     report = dict(report or {})
     report.update(style_diagnostic)
@@ -125,7 +156,8 @@ def handle_prepare_ready(job, db):
         style, style_diagnostic = _choose_automatic_style(original)
 
     overlay = (p.get("overlay") or None) if p.get("text_required") else None
-    tags, faces, seed = p.get("tags"), p.get("faces"), p.get("seed") or p["asset_id"]
+    tags, faces = _take_detected(p, style_diagnostic)
+    seed = p.get("seed") or p["asset_id"]
 
     def edit_fn(data, _vibe, size):
         rendered, _report = edit_photo(

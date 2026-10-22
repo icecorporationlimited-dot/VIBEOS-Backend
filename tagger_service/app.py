@@ -37,7 +37,9 @@ def analyze_bytes(data: bytes) -> dict:
     if len(data) > MAX_BYTES:
         raise ValueError("image too large")
     m = measure(data)
-    return {"values": m["values"], "size": m["size"], **classify(m["values"], m["extras"])}
+    return {"values": m["values"], "size": m["size"], "faces": m["faces"],
+            "content": m["content"],
+            **classify(m["values"], m["extras"], m["content"])}
 
 
 async def _run(data: bytes) -> dict:

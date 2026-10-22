@@ -90,8 +90,54 @@ def edit_plan(key: str, values: dict) -> dict:
     return {k: round(v, 2) if k == "exposure" else int(round(v)) for k, v in plan.items()}
 
 
-def classify(values: dict, extras: dict) -> dict:
-    scores = score_styles(values, extras)
+def _is_night(values: dict, extras: dict) -> bool:
+    return values["exposure"] <= -35 and extras["dark_ratio"] >= 0.30
+
+
+def content_adjust(scores: dict, content: dict, values: dict, extras: dict) -> dict:
+    """Tone numbers alone cannot tell a selfie from a landscape. Nudge the scores by
+    what is in the photo. Bonuses are deliberately modest (+-5..18): they break ties
+    and steer obvious cases, they do not override a very strong tonal match."""
+    if not content:
+        return scores
+    out = dict(scores)
+    faces = int(content.get("n_faces") or 0)
+    people = faces > 0 or float(content.get("skin_share") or 0) > 0.12
+    night = _is_night(values, extras)
+    if night and content.get("flashy") and people:
+        out["y2k"] += 18                      # direct flash at night: the digicam look
+    elif night:
+        out["moody"] += 10
+        out["y2k"] -= 8                       # dark without flash is mood, not flash
+    elif faces:
+        out["clean"] += 10                    # daylight people: clean, true skin
+        out["film"] += 5
+        out["y2k"] -= 10
+        out["moody"] -= 6                     # moody darkens / mutes skin
+    if float(content.get("sky") or 0) > 0.35 and values["warmth"] >= 15:
+        out["golden"] += 6
+    return {k: round(max(0.0, min(100.0, v)), 1) for k, v in out.items()}
+
+
+def content_tags(content: dict, values: dict, extras: dict) -> list:
+    """Short, reliable scene words the editor understands (editor.SCENES)."""
+    if not content:
+        return []
+    tags = []
+    faces = int(content.get("n_faces") or 0)
+    area = float(content.get("face_area") or 0)
+    if faces == 1 and area >= 0.10:
+        tags.append("selfie")
+    elif faces >= 1:
+        tags.append("portrait")
+    if _is_night(values, extras):
+        tags.append("nightout" if (content.get("flashy") and (faces or content.get("skin_share", 0) > 0.12))
+                    else "dramatic")
+    return tags
+
+
+def classify(values: dict, extras: dict, content: dict | None = None) -> dict:
+    scores = content_adjust(score_styles(values, extras), content or {}, values, extras)
     ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
     (best, s1), (second, s2) = ranked[0], ranked[1]
     margin = s1 - s2
@@ -105,6 +151,7 @@ def classify(values: dict, extras: dict) -> dict:
         "low_confidence": fallback or margin < MIN_MARGIN,
         "runner_up": STYLES[second][1],
         "style_scores": {STYLES[k][1]: v for k, v in scores.items()},
+        "tags": content_tags(content or {}, values, extras),
     }
     if not fallback:
         res["edit"] = edit_plan(key, values)

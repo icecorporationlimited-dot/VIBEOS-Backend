@@ -17,3 +17,9 @@ tagger service's public HTTPS URL (no trailing slash).
 
 The service is stateless and does not save uploaded photos. If it is unavailable, VIBEOS falls back
 to its built-in adaptive pixel-based style selection.
+
+## Extra response fields
+`/analyze` also returns `faces` (`[[x, y, w, h], ...]`, 0..1, top-left, EXIF-oriented), `content`
+(`n_faces`, `face_area`, `skin_share`, `flashy`, `sky`) and `tags` (editor scene words).
+Faces come from OpenCV's bundled Haar cascades; no extra download or network access is needed.
+

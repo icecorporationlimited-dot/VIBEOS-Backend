@@ -9,9 +9,11 @@ Pipeline (all heavy work happens at the OUTPUT size, never at 12 MP):
   1. fit      face-safe framing: crop only when no face is cut, else the photo
               is kept whole on a blurred, darkened copy of itself
   2. measure  exposure, range, cast, noise, skin share  -> per-photo parameters
-  3. fix      white balance, exposure, shadow / highlight recovery, denoise
+  3. fix      white balance, exposure (mood-preserving, highlight-guarded),
+              shadow / highlight recovery, denoise
   4. grade    tone curve, vibrance (skin-safe), split-tone, look specials
-  5. finish   clarity, bloom, vignette, grain, sharpening
+  5. finish   gentle skin retouch (faces only, edges kept), clarity, bloom,
+              vignette, grain, sharpening
   6. text     ONLY when `text` is given; placed away from faces
 
 Memory: ~120-180 MB peak for a 12 MP phone photo -> 1080x1350 (measured, see
@@ -96,6 +98,12 @@ STYLES = {
         clarity=0.20, bloom=0.05, bloom_tint=(1, 1, 1), vignette=0.20, grain=0.022,
         grain_px=1.3, sharpen=85, wb=0.0, wb_max=0.0, levels=1.0, mix=True),
 }
+# Auto-exposure limits in stops (lo, hi) per look: dark, moody looks keep their
+# mood instead of being lifted to a "normal" brightness.
+EXPO_LIMITS = {
+    "y2k": (-0.5, 0.70), "moody": (-0.5, 0.45), "film": (-0.5, 0.85),
+    "clean": (-0.6, 0.90), "golden": (-0.5, 0.80), "mono": (-0.5, 0.65),
+}
 STYLE_NAMES = ("natural",) + tuple(STYLES)        # must equal media_names.STYLES
 
 # scene -> (look, tweaks). Used when the tagger sends scene tags instead of a look.
@@ -168,12 +176,22 @@ def _blur_small(m, radius):
 
 
 def _skin_mask(a):
+    """Skin-tone map from a YCbCr chroma box + warm hue order.
+
+    Unlike a plain RGB rule it keeps working on deep skin tones and in dim
+    light (only chroma matters, not brightness). Grey, sky and green stay out.
+    Wood / sand can still match; callers only use this to PROTECT or to gate
+    gentle effects, never for strong edits.
+    """
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    y = r * 0.299 + g * 0.587 + b * 0.114
+    cb = 0.5 + (-0.168736 * r - 0.331264 * g + 0.5 * b)
+    cr = 0.5 + (0.5 * r - 0.418688 * g - 0.081312 * b)
     mx = a.max(-1)
-    d = mx - a.min(-1)
-    sat = d / (mx + 1e-6)
-    h6 = (g - b) / (d + 1e-6)
-    skin = (r >= g) & (g >= b) & (h6 <= 0.85) & (sat > 0.12) & (sat < 0.75) & (mx > 0.25)
+    sat = (mx - a.min(-1)) / (mx + 1e-6)
+    skin = ((cb >= 0.30) & (cb <= 0.50) & (cr >= 0.52) & (cr <= 0.68)
+            & ((cr - cb) > 0.04) & (r > g) & (r > b)
+            & (y > 0.07) & (y < 0.97) & (sat > 0.10) & (sat < 0.80))
     return skin.astype(np.float32)
 
 
@@ -266,9 +284,34 @@ def _quick_look(img):
     return float(skin.mean()), pt
 
 
-SAFE_TRIM = 0.10        # without face info and with people likely: trim at most 10 %
-SCENERY_TRIM = 0.35     # no people: a bigger crop is fine
-FACE_TRIM = 0.50        # faces known: crop up to 50 % as long as every face stays inside
+SAFE_TRIM = 0.10        # people likely but nothing located: trim at most 10 %
+PEOPLE_TRIM = 0.55      # people located by skin box: crop only if that box stays inside
+SCENERY_TRIM = 0.58     # no people: saliency crop (16:9 -> 4:5 needs 55 %)
+FACE_TRIM = 0.62        # faces known: crop as long as every face stays inside
+
+
+def _skin_box(img):
+    """Box (x, y, w, h; 0..1) around the skin-coloured pixels, or None.
+
+    A stand-in for faces when none are known: percentiles (not min/max) so a few
+    stray pixels do not blow the box up. It is conservative by design - hands,
+    arms or wood can enlarge it, which only makes the framing safer.
+    """
+    small = img.copy()
+    small.thumbnail((160, 160))
+    m = _skin_mask(np.asarray(small, dtype=np.float32) / 255.0)
+    m = _blur_small(m, 1.0) > 0.35
+    ys, xs = np.nonzero(m)
+    if xs.size < 12:
+        return None
+    h, w = m.shape
+    x0, x1 = np.percentile(xs, (4, 96))
+    y0, y1 = np.percentile(ys, (4, 96))
+    x0, x1 = max(0.0, (x0 - 1) / w), min(1.0, (x1 + 2) / w)
+    y0, y1 = max(0.0, (y0 - 1) / h), min(1.0, (y1 + 2) / h)
+    if x1 - x0 < 0.02 or y1 - y0 < 0.02:
+        return None
+    return (float(x0), float(y0), float(x1 - x0), float(y1 - y0))
 
 
 def _group(faces):
@@ -311,15 +354,20 @@ def _crop_box(w, h, tr, faces, pt):
 
 
 def _blur_fill(img, size, anchor_y=0.5):
-    """Whole photo, centred, over a blurred + darkened copy of itself. -> (img, (px, py, fw, fh))."""
+    """Whole photo, centred, over a soft blurred copy of itself with a gentle drop
+    shadow (looks like a deliberate layout, not a black band). -> (img, (px, py, fw, fh))."""
     tw, th = size
     bg = ImageOps.fit(img, (max(8, tw // 8), max(8, th // 8)), Image.Resampling.BILINEAR)
-    bg = bg.filter(ImageFilter.GaussianBlur(3)).resize(size, Image.Resampling.BICUBIC)
-    bg = ImageEnhance.Brightness(bg).enhance(0.62)
-    bg = ImageEnhance.Color(bg).enhance(0.85)
+    bg = bg.filter(ImageFilter.GaussianBlur(2.5)).resize(size, Image.Resampling.BICUBIC)
+    bg = ImageEnhance.Brightness(bg).enhance(0.74)
     fg = ImageOps.contain(img, size, Image.Resampling.LANCZOS)
     px = (tw - fg.width) // 2
     py = int((th - fg.height) * anchor_y)
+    shadow = Image.new("L", size, 0)
+    ImageDraw.Draw(shadow).rectangle((px, py + int(th * 0.004), px + fg.width, py + fg.height
+                                      + int(th * 0.008)), fill=110)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(max(6, tw * 0.014)))
+    bg.paste((0, 0, 0), (0, 0), shadow)
     bg.paste(fg, (px, py))
     return bg, (px, py, fg.width, fg.height)
 
@@ -335,19 +383,25 @@ def _fit(img, size, faces, report):
         return img.resize(size, Image.Resampling.LANCZOS), faces
     trim = 1 - (tr / r if r > tr else r / tr)
     skin, pt = _quick_look(img)
-    people_risk = skin > 0.035
+    people_risk = skin > 0.03
+    guard = faces                                      # what the crop must keep inside
     if faces:
         report["faces"] = len(faces)
         limit = FACE_TRIM
+    elif people_risk:
+        sb = _skin_box(img)
+        guard = [sb] if sb else []
+        limit = PEOPLE_TRIM if sb else SAFE_TRIM
     else:
-        limit = SAFE_TRIM if people_risk else SCENERY_TRIM
-    box = _crop_box(w, h, tr, faces, pt) if trim <= limit else None
+        limit = SCENERY_TRIM
+    box = _crop_box(w, h, tr, guard, pt) if trim <= limit else None
     if box is not None:
         l, t, rr, b = box
         out = img.resize(size, Image.Resampling.LANCZOS, box=box)
         moved = [((x * w - l) / (rr - l), (y * h - t) / (b - t),
                   fw * w / (rr - l), fh * h / (b - t)) for x, y, fw, fh in faces]
-        report["crop"] = "face" if faces else ("saliency" if not people_risk else "safe")
+        report["crop"] = ("face" if faces else
+                          ("saliency" if not people_risk else "skinbox"))
         return out, moved
     out, (px, py, fw, fh) = _blur_fill(img, size, 0.46 if th > tw else 0.5)
     moved = [((px + x * fw) / tw, (py + y * fh) / th, f_w * fw / tw, f_h * fh / th)
@@ -535,9 +589,17 @@ def _auto_white_balance(a, strength, max_gain):
     return tuple(round(float(g), 3) for g in gains)
 
 
-def _auto_exposure(a, target, strength, lo=-0.6, hi=1.3):
-    med = float(np.median(a[::4, ::4] @ LUMA))
-    stops = hi if med <= 0.01 else float(2.2 * np.log2(target / med) * strength)
+def _auto_exposure(a, target, strength, lo=-0.6, hi=0.9):
+    """Move the median towards `target`, but never past the look's stop limits and
+    never so far that real highlights (street lamps, windows) blow out."""
+    lum = a[::4, ::4] @ LUMA
+    med = float(np.median(lum))
+    stops = 0.5 * hi if med <= 0.01 else float(2.2 * np.log2(target / med) * strength)
+    if stops > 0:                                        # brightening: protect highlights
+        p98 = float(np.percentile(lum, 98))
+        if p98 > 0.35:
+            room = float(np.log2(1.6 / max(p98 ** 2.2, 1e-4)))
+            stops = min(stops, max(0.0, room))
     stops = max(lo, min(hi, stops))
     if abs(stops) < 0.03:
         return 0.0
@@ -713,6 +775,57 @@ def _cast_guard(a, cap):
 # ---------------------------------------------------------------------------
 # 5. Finish
 # ---------------------------------------------------------------------------
+def _face_zone(size, faces):
+    """Soft 0..1 map over each face plus a little neck/jaw; None without faces."""
+    if not faces:
+        return None
+    tw, th = size
+    gw, gh = 64, max(8, int(64 * th / tw))
+    yy, xx = np.mgrid[0:gh, 0:gw].astype(np.float32)
+    xx, yy = (xx + 0.5) / gw, (yy + 0.5) / gh
+    m = np.zeros((gh, gw), np.float32)
+    for x, y, w, h in faces:
+        cx, cy = x + w / 2, y + h / 2 + 0.22 * h
+        rx, ry = 0.80 * w + 0.01, 1.05 * h + 0.01
+        m = np.maximum(m, np.exp(-(((xx - cx) / rx) ** 4 + ((yy - cy) / ry) ** 4)))
+    return _up(m, (tw, th))
+
+
+def _skin_amount(faces, skin_care):
+    """How much retouch: scales with face size, small faces get little."""
+    if faces:
+        area = max(w * h for _x, _y, w, h in faces)
+        amt = min(0.42, 0.18 + 6.0 * area)
+        return max(amt, 0.30) if skin_care else (amt if area > 0.004 else 0.0)
+    return 0.30 if skin_care else 0.0
+
+
+def _retouch_skin(a, skin, zone, amount):
+    """Gentle skin smoothing that keeps pores partly and real edges fully.
+
+    Blend towards a blurred copy only where the pixel is skin-coloured AND locally
+    flat; eyes, brows, lips, hair and jewellery have strong local detail, so they
+    are left alone. Never more than `amount` (<= ~0.45) so skin does not go plastic.
+    Returns the mean applied weight (for the report).
+    """
+    if amount <= 0:
+        return 0.0
+    h, w, _ = a.shape
+    im = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
+    soft = np.asarray(im.filter(ImageFilter.GaussianBlur(max(1.5, max(w, h) * 0.0028))),
+                      dtype=np.float32) / 255.0
+    del im
+    detail = np.abs(a @ LUMA - soft @ LUMA)
+    m = skin * (1.0 - np.clip(detail / 0.12, 0, 1)) ** 2
+    if zone is not None:
+        m *= zone
+    m *= amount
+    a += (soft - a) * m[..., None]
+    del soft, detail
+    np.clip(a, 0, 1, out=a)
+    return round(float(m.mean() / max(amount, 1e-6)), 3)
+
+
 def _clarity(a, amount, skin):
     if amount <= 0:
         return
@@ -802,7 +915,8 @@ def _style_pass(img, style, tweaks, faces, pt, rng, report, adaptive_plan=None):
                   scene=report.get("scene"))
 
     report["wb_gain"] = _auto_white_balance(a, p["wb"], p["wb_max"])
-    report["exposure_stops"] = _auto_exposure(a, p["target"], p["strength"])
+    lo, hi = EXPO_LIMITS.get(style, (-0.6, 0.9))
+    report["exposure_stops"] = _auto_exposure(a, p["target"], p["strength"], lo, hi)
     report["shadow_lift"], report["highlight_recovery"] = _recover_tones(a, a[::4, ::4] @ LUMA)
     if style == "mono":
         _levels(a, 1.0, 0.4, 99.6, 0.015, 0.975)         # rich blacks, detailed whites
@@ -838,6 +952,14 @@ def _style_pass(img, style, tweaks, faces, pt, rng, report, adaptive_plan=None):
         _sky_balance(a, p["sky"])
     if p.get("cast_cap"):
         report["rb_ratio_before_guard"] = _cast_guard(a, p["cast_cap"])
+    amt = _skin_amount(faces, p.get("skin_care"))
+    skin_keep = None                                     # where final sharpening is held back
+    if amt > 0:
+        zone = _face_zone((a.shape[1], a.shape[0]), faces)
+        report["skin_retouch"] = _retouch_skin(a, skin, zone, amt)
+        sm = skin if zone is None else skin * zone
+        skin_keep = Image.fromarray((np.clip(sm, 0, 1) * 0.65 * 255).astype(np.uint8), "L")
+        del sm, zone
     _clarity(a, p["clarity"], skin)
     del skin
     _bloom(a, p["bloom"], p["bloom_tint"])
@@ -854,8 +976,11 @@ def _style_pass(img, style, tweaks, faces, pt, rng, report, adaptive_plan=None):
     out = Image.fromarray(a.astype(np.uint8))
     del a
     radius = max(1.0, 0.0012 * max(out.size))
-    return out.filter(ImageFilter.UnsharpMask(radius=radius, percent=int(p["sharpen"]),
-                                              threshold=2))
+    sharp = out.filter(ImageFilter.UnsharpMask(radius=radius, percent=int(p["sharpen"]),
+                                               threshold=2))
+    if skin_keep is not None:                            # retouched skin: no re-sharpened noise
+        sharp = Image.composite(out, sharp, skin_keep)
+    return sharp
 
 
 # ---------------------------------------------------------------------------
