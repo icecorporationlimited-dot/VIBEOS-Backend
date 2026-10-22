@@ -149,6 +149,7 @@ def build_runtime(db, content_buffer, bot_token):
                     refresh_days=cfg.refresh_before_days, planner=planner,
                     trend_cfg=trend_cfg, engagement_ai=engagement_ai,
                     engagement_events=engagement_events, web_owners=web_publishing)
+    worker.story_db = db     # lets the worker cancel story-library jobs whose trend expired (step 11)
 
     web_login = None
     web_auth_cfg = load_web_auth_settings()
@@ -183,7 +184,7 @@ def build_runtime(db, content_buffer, bot_token):
             cfg, sessions, content_buffer, autopilot, accounts=accounts,
             service=service, ingest=web_ingest,
             posting_engine=getattr(worker, "handles_web_owners", False),
-            planner=planner)
+            planner=planner, story_db=db)
 
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
