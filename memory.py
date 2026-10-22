@@ -29,7 +29,7 @@ DEFAULT_STYLE = "baddie"
 def ensure_indexes():
     """Create indexes and verify that MongoDB is reachable."""
     _client.admin.command("ping")
-    _users.create_index("telegram_id", unique=True)
+    _users.create_index("telegram_id", unique=True, sparse=True)
 
 
 def get_preferences(telegram_id) -> dict:
