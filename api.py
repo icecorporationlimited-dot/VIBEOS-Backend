@@ -225,6 +225,12 @@ async def api_caption(
     raise HTTPException(502, "AI caption failed. Try again.")
 
 
+# Story library feed (story_engine step 10b): /api/story-feed, /list, /mark, /image/{id}.
+# Must be included BEFORE the catch-all proxy route at the bottom of this file.
+from story_engine.api_routes import make_router  # noqa: E402
+app.include_router(make_router(_check_key, _db))
+
+
 # Security headers for the hosted UI (the bot's own server already sets its own).
 _UI_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
