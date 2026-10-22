@@ -1,0 +1,72 @@
+"""Step 3a — Verify & safety gate. Runs BEFORE scoring; virality never overrides it.
+
+gate(trend) -> {"status": "verified" | "hold" | "rejected", "reasons": [...], "flags": [...]}
+  rejected : topic type we never automate (see config.REJECT_WORDS)
+  hold     : not enough proof YET (re-checked every run, may become verified when more sources appear)
+  verified : safe to score and write
+"""
+import re
+from datetime import datetime, timezone
+
+from . import config as cfg
+
+
+def _aware(dt):
+    return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _has(text: str, words) -> list:
+    t = text.lower()
+    return [w for w in words if re.search(r"\b" + re.escape(w) + r"\b", t)]
+
+
+def publishers(trend) -> list:
+    seen, out = set(), []
+    for s in trend.get("sources", []):
+        n = (s.get("name") or "").strip()
+        if n and n.lower() not in seen:
+            seen.add(n.lower())
+            out.append(n)
+    return out
+
+
+def age_hours(trend, now=None):
+    now = now or datetime.now(timezone.utc)
+    times = [_aware(s.get("published_at")) for s in trend.get("sources", []) if s.get("published_at")]
+    if not times:
+        return None
+    return max(0.0, (now - max(times)).total_seconds() / 3600)   # newest source = how fresh the story is
+
+
+def gate(trend, now=None) -> dict:
+    title = trend.get("title", "")
+    pubs = publishers(trend)
+    reasons, flags = [], []
+    is_calendar = trend.get("category") == "festival" and "event_calendar" in [p.lower() for p in pubs]
+
+    bad = _has(title, cfg.REJECT_WORDS)
+    if bad:
+        return {"status": "rejected", "reasons": [f"sensitive topic not automated: {bad[0]}"], "flags": ["sensitive"]}
+
+    solemn = bool(_has(title, cfg.DEATH_WORDS))
+    if solemn:
+        flags.append("solemn")
+    need = cfg.MIN_PUBLISHERS_SOLEMN if solemn else cfg.MIN_PUBLISHERS
+    if not is_calendar and len(pubs) < need:
+        reasons.append(f"only {len(pubs)} publisher(s), need {need}")
+
+    rumour = _has(title, cfg.RUMOUR_WORDS)
+    if rumour:
+        flags.append("rumour")
+        reasons.append(f"unconfirmed wording: {rumour[0]}")
+
+    if not is_calendar:
+        age = age_hours(trend, now)
+        if age is None:
+            reasons.append("no source timestamp")
+        elif age > cfg.MAX_AGE_HOURS:
+            return {"status": "rejected", "reasons": [f"stale ({age:.0f}h old)"], "flags": flags}
+
+    if reasons:
+        return {"status": "hold", "reasons": reasons, "flags": flags}
+    return {"status": "verified", "reasons": [], "flags": flags}

@@ -1,0 +1,25 @@
+# Story-library pipeline (story_engine.web): Playwright + Chromium, fonts, FastAPI.
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MALLOC_ARENA_MAX=2 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-color-emoji libraqm0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements-worker.txt .
+RUN pip install --no-cache-dir -r requirements-worker.txt fastapi uvicorn \
+    && playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright
+
+COPY . .
+
+RUN useradd --create-home --uid 10001 vibeos && chown -R vibeos:vibeos /app
+USER vibeos
+
+EXPOSE 10000
+CMD ["sh", "-c", "uvicorn story_engine.web:app --host 0.0.0.0 --port ${PORT:-10000}"]

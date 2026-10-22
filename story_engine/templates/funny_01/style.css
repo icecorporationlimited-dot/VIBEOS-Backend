@@ -1,0 +1,11 @@
+@font-face{font-family:"Poppins-Bold";src:url("../_shared/fonts/Poppins-Bold.ttf")}
+@font-face{font-family:"Poppins-Medium";src:url("../_shared/fonts/Poppins-Medium.ttf")}
+@font-face{font-family:"Lora-Italic-Variable";src:url("../_shared/fonts/Lora-Italic-Variable.ttf")}
+*{margin:0;box-sizing:border-box}
+body{width:1080px;height:1920px;overflow:hidden}
+.card{position:relative;width:1080px;height:1920px;background:var(--bg) center/cover no-repeat;display:flex;flex-direction:column;justify-content:flex-end;padding:150px 80px 220px}
+.shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.8),rgba(0,0,0,0) 60%)}
+.copy{position:relative;font-family:"Poppins-Bold",sans-serif;font-size:80px;line-height:1.18;color:#fff;text-align:left;text-shadow:0 4px 24px rgba(0,0,0,.45)}
+.copy .line{margin-bottom:28px}
+.copy .line:first-child{color:#ffe600}
+.credit{position:absolute;left:80px;right:80px;bottom:90px;font:28px "Poppins-Medium",sans-serif;color:rgba(255,255,255,.6);text-align:left}

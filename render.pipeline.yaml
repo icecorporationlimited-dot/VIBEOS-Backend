@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: vibeos-pipeline
+    runtime: docker
+    dockerfilePath: ./Dockerfile.pipeline
+    plan: starter                 # free = sleeps after 15 min idle (needs external pinger on POST /run)
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI          # same value as the other services
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
+      - key: GNEWS_API_KEY
+        sync: false
+      - key: PIPELINE_SECRET
+        generateValue: true
+      - key: PIPELINE_EVERY_MIN
+        value: "20"
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PUBLIC_BASE
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false

@@ -1,0 +1,29 @@
+{
+  "layout_id": "movie_01",
+  "version": 1,
+  "categories": [
+    "movies",
+    "gaming"
+  ],
+  "moods": [
+    "hype",
+    "funny",
+    "wholesome"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 3,
+      "max_chars": 60
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false
+}

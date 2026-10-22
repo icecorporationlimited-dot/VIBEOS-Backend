@@ -1,0 +1,27 @@
+{
+  "layout_id": "festival_01",
+  "version": 1,
+  "categories": [
+    "festival"
+  ],
+  "moods": [
+    "wholesome",
+    "hype"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 4,
+      "max_chars": 60
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false
+}

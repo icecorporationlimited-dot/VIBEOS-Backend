@@ -43,6 +43,10 @@ import publish_bot
 from ratelimit import make_gate
 from publishing.autopilot import AutopilotStore
 
+from memory import db
+from story_engine import db as se
+se.ensure_indexes(db)
+
 # =========================================================
 # CONFIGURATION
 # =========================================================
