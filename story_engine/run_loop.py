@@ -41,10 +41,9 @@ def release(name="pipeline"):
 
 
 def build_llm():
-    from engagement.openrouter_ai import OpenRouterAI
+    from engagement.openrouter_ai import build_llm as _build
     import settings
-    return OpenRouterAI(getattr(settings, "OPENROUTER_API_KEY", ""),
-                        getattr(settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    return _build(settings)
 
 
 _vision = None
