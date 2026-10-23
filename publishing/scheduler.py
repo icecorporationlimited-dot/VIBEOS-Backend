@@ -61,7 +61,8 @@ class Worker:
         self.reel_audio_dir = reel_audio_dir   # optional folder of audio YOU have rights to
         self._reel_blocked = {}                # owner_id -> retry-after time after a failed render
         self.interval, self.batch, self.refresh_days = interval, batch, refresh_days
-        self.trend_cfg = trend_cfg             # trends.auto_story.TrendStoryConfig or None
+        self.trend_cfg = None                  # legacy auto_story path removed; kept so old callers don't break
+        self.story_db = None                   # main Mongo db holding the story library; set by publish_bot
         self.engagement_ai = engagement_ai
         self.engagement_events = engagement_events
         if self.engagement_events is not None:
@@ -117,8 +118,8 @@ class Worker:
         if self._due("autofill"):
             self._guard(self._expire_trend_jobs)
             self._guard(self._autofill)
-        if self.trend_cfg is not None and self._due("trends"):
-            self._guard(self._trend_stories)
+        if self.story_db is not None and self._due("trends"):
+            self._guard(self._auto_story_library)
         if self.engagement_ai is not None and self._engagement_due():
             self._guard(self._engagement)
         if self._due("tokens"):
@@ -229,29 +230,21 @@ class Worker:
             if n:
                 logger.info("Cancelled %d story-library job(s) whose trend expired", n)
 
-    def _trend_stories(self):
-        from trends import auto_story
-        cfg = self.trend_cfg
-        users = []
+    def _auto_story_library(self):
+        """Fully automatic: ready library stories -> Instagram Story queue. No taps, no approval."""
+        from story_engine import auto_publish
         for principal in self._principals():
             s = self.autopilot.get(principal)
             acct = self.accounts.get_for(principal)
-            if (s.get("trend_stories") == "auto" and not s["paused"]
+            if not (s.get("trend_stories") == "auto" and not s["paused"]
                     and "story" in s["formats"] and acct and acct.get("status") == "active"):
-                users.append((principal, s))
-        if not users:
-            return
-        items = cfg.fetch()               # one network fetch shared by all users
-        if not items:
-            return
-        for principal, s in users:
-            done = auto_story.post_one(principal, items, cfg=cfg, settings=s, buffer=self.buffer,
-                                       service=self.service, now=self.clock())
+                continue
+            done = auto_publish.publish_one(self.story_db, self.buffer, self.service, principal,
+                                            now=self.clock())
             if done:
-                src = ", ".join(done["publishers"][:3]) or "news sources"
-                self._tell(principal, f"📰 Trend Story queued: “{done['title']}” ({done['category']}, "
-                               f"via {src}). It posts within {cfg.max_age_hours:g}h or is dropped. "
-                               "/queue to see it, /cancel to stop it.")
+                self._tell(principal, f"📰 Story queued automatically: \u201c{done['title']}\u201d. "
+                                      "It goes out when your autopilot rules allow, or is dropped if the trend "
+                                      "expires. /queue to see it, /cancel to stop it.")
 
     # ---- AI comment engagement -------------------------------------------
     def _engagement_due(self):
