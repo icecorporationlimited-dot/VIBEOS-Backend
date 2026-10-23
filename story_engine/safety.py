@@ -166,6 +166,10 @@ def numbers(text, lenient=False) -> set:
     return {n for n in out if n}
 
 
+def _is_year(n: str) -> bool:
+    return len(n) == 4 and n.isdigit() and 1900 <= int(n) <= 2100
+
+
 def has_death_words(text) -> bool:
     return bool(_DEATH_RX and _DEATH_RX.search(norm(text)))
 
@@ -190,6 +194,8 @@ def crosscheck(title, heads, trusted, solemn):
 
     # (b) every number in the headline must be repeated by >= MIN_NUMBER_SOURCES publishers
     for n in sorted(numbers(title)):
+        if _is_year(n):                       # a year (2026) is context, not a claim that needs 2 publishers
+            continue
         seen = {pub.lower() for pub, t in heads if n in numbers(t, lenient=True)}
         if len(seen) < MIN_NUMBER_SOURCES:
             reasons.append(f"number {n} not confirmed by {MIN_NUMBER_SOURCES} publishers")
