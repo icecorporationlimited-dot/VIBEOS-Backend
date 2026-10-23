@@ -8,10 +8,12 @@ All checks are fail-closed: an error or a missing tool means "not ready", never 
 import base64
 import json
 import logging
+import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 
 from . import config as cfg
-from . import layouts, writer
+from . import layouts, safety, verify, writer
 from .db import ASSETS, LAYOUTS, TRENDS
 from .visuals import REQUIRED, license_ok
 
@@ -40,7 +42,51 @@ def check_trend(trend) -> list:
     exp = trend.get("expires_at")
     if exp and (exp if exp.tzinfo else exp.replace(tzinfo=timezone.utc)) < datetime.now(timezone.utc):
         return ["trend expired"]
+    # The stored status can be hours old; sources / headlines may have changed since. Re-run the live gate.
+    g = verify.gate(trend)
+    if g["status"] != "verified":
+        return [f"trend fails the safety gate now ({g['status']}): {(g['reasons'] or ['?'])[0]}"]
     return []
+
+
+def check_safety(asset, trend) -> list:
+    """Sensitive wording anywhere the reader can see it: the written copy and the context the LLM added."""
+    ctx = trend.get("context") or {}
+    texts = list(asset.get("copy") or []) + [str(ctx.get("what") or "")] + [str(w) for w in ctx.get("who") or []]
+    hit = safety.reject_hit(*texts)
+    return [f"sensitive wording in story: {hit}"] if hit else []
+
+
+def check_consistency(db, trend, llm) -> list:
+    """Do the publishers' own headlines agree with each other? (Grouping is by word overlap, so 'India beat
+    Australia' and 'Australia beat India' land in one group.) One LLM call per trend, cached on the trend."""
+    heads = safety.source_headlines(trend)
+    if len({p.lower() for p, _ in heads}) < 2:
+        return []                                       # calendar events / nothing to compare: verify.gate decides
+    if llm is None:
+        return ["no llm for consistency judge"]
+    key = hashlib.sha1("|".join(sorted(f"{p}:{t}" for p, t in heads)).encode("utf-8")).hexdigest()
+    cached = trend.get("consistency") or {}
+    if cached.get("key") == key:
+        return [] if cached.get("ok") else [f"sources disagree: {cached.get('why', '')[:80]}"]
+    try:
+        raw = llm.chat(safety.CONSISTENCY_SYSTEM, safety.consistency_user(trend.get("title"), heads),
+                       temperature=0, max_tokens=200)
+        m = re.search(r"\{.*\}", raw or "", flags=re.S)
+        data = json.loads(m.group(0)) if m else None
+        verdict = data.get("consistent") if isinstance(data, dict) else None
+        ok = verdict is True or str(verdict).strip().lower() == "true"
+        if not isinstance(data, dict) or verdict is None:
+            return [RETRY + "source consistency judge returned junk"]
+    except Exception:
+        return [RETRY + "source consistency judge failed"]
+    why = "; ".join(str(c)[:60] for c in (data.get("conflicts") or [])[:2])
+    try:
+        db[TRENDS].update_one({"trend_id": trend["trend_id"]}, {"$set": {"consistency": {
+            "key": key, "ok": ok, "why": why, "checked_at": datetime.now(timezone.utc)}}})
+    except Exception:
+        log.exception("could not cache consistency verdict for %s", trend.get("trend_id"))
+    return [] if ok else [f"sources disagree: {why[:80]}"]
 
 
 def check_facts(asset, trend, llm) -> list:
@@ -131,10 +177,10 @@ def check_duplicates(db, asset, now=None) -> list:
 def evaluate(db, asset, llm=None, vision=None, http=None) -> list:
     trend = db[TRENDS].find_one({"trend_id": asset["trend_id"]})
     layout = db[LAYOUTS].find_one({"layout_id": asset.get("layout_id")})
-    reasons = check_trend(trend)
+    reasons = check_trend(trend) or check_safety(asset, trend)
     if reasons:
         return reasons                                  # no point checking the rest
-    return (check_facts(asset, trend, llm) + check_overflow(asset, layout)
+    return (check_facts(asset, trend, llm) + check_consistency(db, trend, llm) + check_overflow(asset, layout)
             + check_image(asset, trend, http, vision) + check_duplicates(db, asset))
 
 
