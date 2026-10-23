@@ -114,10 +114,8 @@ def build_runtime(db, content_buffer, bot_token):
         model=getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b"),
         tz_for=tz_for,
     )
-    from engagement.openrouter_ai import OpenRouterAI
-    engagement_ai = OpenRouterAI(
-        getattr(app_settings, "OPENROUTER_API_KEY", ""),
-        getattr(app_settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    from engagement.openrouter_ai import build_llm
+    engagement_ai = build_llm(app_settings)
     engagement_events = db["engagement_events"]
     # Web publishing is opt-in (WEB_PUBLISHING=1). Until then web-owned jobs are
     # never claimed, exactly as before.
