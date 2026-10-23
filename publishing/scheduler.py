@@ -240,7 +240,7 @@ class Worker:
                     and "story" in s["formats"] and acct and acct.get("status") == "active"):
                 continue
             done = auto_publish.publish_one(self.story_db, self.buffer, self.service, principal,
-                                            now=self.clock())
+                                            now=self.clock(), blocked_topics=s.get("blocked_topics"))
             if done:
                 self._tell(principal, f"📰 Story queued automatically: \u201c{done['title']}\u201d. "
                                       "It goes out when your autopilot rules allow, or is dropped if the trend "
