@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from publishing.identity import Principal
 from publishing.service import PublishError
-from . import feed, mongo_store
+from . import feed, mongo_store, safety, verify
 from .db import FEED, TRENDS
 from .variants import apply_crop
 
@@ -62,6 +62,12 @@ def queue_story(db, content_buffer, publish_service, principal: Principal,
     expires = _aware((trend or {}).get("expires_at"))
     if not trend or trend.get("verification_status") != "verified" or not expires or expires <= now:
         raise StoryPublishError("This trend has expired or is no longer verified.")
+    # Last gate right before queueing: the stored status can be hours old, so re-run the live safety gate
+    # (sensitive topics in any publisher headline, trust, disputes, number / death corroboration).
+    live = verify.gate(trend, now)
+    if live["status"] != "verified":
+        log.warning("story %s blocked by live safety gate: %s", story_asset_id, live["reasons"])
+        raise StoryPublishError("This trend no longer passes the safety check.")
 
     when = _aware(scheduled_at)
     if when is not None:
@@ -87,7 +93,10 @@ def queue_story(db, content_buffer, publish_service, principal: Principal,
         trend_key=f'{trend["trend_id"]}:{story_asset_id}',
         title=trend.get("title", "Trend story"),
         meta={"decision": {"source": "auto_trend_story", "trend_id": trend["trend_id"],
-                           "mood": asset.get("mood"), "angle": asset.get("angle")}},
+                           "mood": asset.get("mood"), "angle": asset.get("angle"),
+                           # what the card really says: PolicyEngine checks the user's blocked topics against it
+                           "trend_title": trend.get("title", ""), "copy": list(asset.get("copy") or []),
+                           "source_titles": [t for _, t in safety.source_headlines(trend)]}},
     )
     buffered = res["asset"]                                 # add_trend_story returns a dict, not a tuple
 
