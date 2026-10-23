@@ -26,10 +26,12 @@ RETRY = "retry: "
 NO_VISION = RETRY + "no vision model configured (set OPENROUTER_API_KEY or GROQ_API_KEY)"
 MAX_ATTEMPTS = 3
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
+_VISION_CACHE = {}          # (image_url, title) -> verdict; one vision call per trend photo, not one per angle
 
 RELEVANCE_PROMPT = (
     "Headline: {title}\nDoes this photo suit a social story about this headline? It must not mislead (wrong event, "
-    "wrong people, unrelated subject) and must not look disturbing or inappropriate next to the text. "
+    "unrelated subject or setting) and must not look disturbing or inappropriate next to the text. "
+    "Do NOT try to identify real people from their faces; judge only the subject, setting and mood. "
     'Return strict JSON only: {{"relevant": true|false, "reason": "short"}}'
 )
 
@@ -146,6 +148,9 @@ def check_image(asset, trend, http=None, vision=None) -> list:
         return [f"{RETRY}image does not load: {type(exc).__name__}"]
     if not vision:
         return [NO_VISION] if cfg.QC_REQUIRE_VISION else []
+    ck = (img["image_url"], trend["title"])
+    if ck in _VISION_CACHE:
+        return list(_VISION_CACHE[ck])
     try:
         res = vision(RELEVANCE_PROMPT.format(title=trend["title"]), base64.b64encode(data).decode(), 0)
         if isinstance(res, str):
@@ -154,8 +159,10 @@ def check_image(asset, trend, http=None, vision=None) -> list:
     except Exception:
         return [f"{RETRY}image relevance check failed"]
     if relevant is True or str(relevant).strip().lower() == "true":     # some models answer "true" as text
+        _VISION_CACHE[ck] = []
         return []
-    return [f"image not relevant: {reason}"]
+    _VISION_CACHE[ck] = [f"image not relevant: {reason}"]
+    return list(_VISION_CACHE[ck])
 
 
 def check_duplicates(db, asset, now=None) -> list:
@@ -207,6 +214,15 @@ def process(db, llm=None, vision=None, http=None, limit=None) -> dict:
                 continue
             reasons = reasons + [f"gave up after {MAX_ATTEMPTS} attempts"]
         reasons = [r[len(RETRY):] if r.startswith(RETRY) else r for r in reasons]
+        if reasons and all(r.startswith("image not relevant") for r in reasons) and (a.get("image") or {}).get("image_url"):
+            # Copy is fine, only the photo is wrong: swap in the generic background and re-render, instead of
+            # throwing away the (already paid-for) copy. check_image() passes generic images, so no loop.
+            from .visuals import generic_image
+            db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {
+                "image": generic_image(a["mood"]), "rendered_image_url": None, "render_meta": None,
+                "quality_reasons": reasons, "quality_checked_at": now, "image_swapped": True}})
+            stats["swapped"] = stats.get("swapped", 0) + 1
+            continue
         ok = not reasons
         db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {
             "quality_status": "ready" if ok else "rejected", "quality_reasons": reasons,
