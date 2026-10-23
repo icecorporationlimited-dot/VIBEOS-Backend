@@ -65,11 +65,11 @@ def fetch_category(category: str, query: str, http=None, limit: int = 30):
         for g in groups:
             if similar(g["title"], a["title"]):
                 if a["name"] not in {s["name"] for s in g["sources"]}:
-                    g["sources"].append({k: a[k] for k in ("name", "url", "published_at")})
+                    g["sources"].append({**{k: a[k] for k in ("name", "url", "published_at")}, "title": str(a.get("title") or "")[:300]})
                 break
         else:
             groups.append({"title": a["title"], "rank": rank,
-                           "sources": [{k: a[k] for k in ("name", "url", "published_at")}]})
+                           "sources": [{**{k: a[k] for k in ("name", "url", "published_at")}, "title": str(a.get("title") or "")[:300]}]})
     out = []
     for g in groups:
         signal = min(100, len(g["sources"]) * 25 + max(0, 30 - g["rank"]))
