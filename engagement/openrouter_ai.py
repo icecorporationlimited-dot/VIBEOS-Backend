@@ -105,16 +105,23 @@ class OpenRouterAI:
             raise OpenRouterError("API key is not configured.")
         try:
             for attempt in range(3):
+                body = {"model": self.model,
+                        "messages": [{"role": "system", "content": str(system)[:4000]},
+                                     {"role": "user", "content": str(user)[:6000]}],
+                        "temperature": max(0.0, min(float(temperature), 1.0)),
+                        "max_tokens": max(50, min(int(max_tokens), 800))}
+                if "gpt-oss" in self.model.lower() and "groq.com" in str(self.api_url):
+                    # Reasoning model: keep thinking short and leave token room for the answer,
+                    # otherwise reasoning eats max_tokens and content comes back empty/cut.
+                    body["reasoning_effort"] = "low"
+                    body["include_reasoning"] = False
+                    body["max_tokens"] = max(50, min(int(max_tokens), 800)) + 700
                 response = self.http.post(
                     self.api_url,
                     headers={"Authorization": f"Bearer {self.api_key}",
                              "Content-Type": "application/json"},
-                    json={"model": self.model,
-                          "messages": [{"role": "system", "content": str(system)[:4000]},
-                                       {"role": "user", "content": str(user)[:6000]}],
-                          "temperature": max(0.0, min(float(temperature), 1.0)),
-                          "max_tokens": max(50, min(int(max_tokens), 800))},
-                    timeout=self.timeout)
+                    json=body,
+                    timeout=max(self.timeout, 40))
                 if response.status_code != 429 or attempt == 2:
                     break
                 try:
