@@ -11,11 +11,80 @@ FRESH_HALF_LIFE_HOURS = 6       # freshness halves every 6h
 
 # Publisher credibility 0-100 (lowercase). Unknown publishers get DEFAULT_CREDIBILITY. Edit to taste.
 CREDIBILITY = {
-    "reuters": 95, "bbc news": 92, "the hindu": 90, "espncricinfo": 90, "cricbuzz": 88,
-    "ndtv": 85, "hindustan times": 85, "indian express": 86, "the indian express": 86,
-    "times of india": 80, "the times of india": 80, "india today": 82, "mint": 82,
-    "news18": 75, "firstpost": 72, "the economic times": 82, "bollywood hungama": 70,
-    "pinkvilla": 62, "ign": 85, "polygon": 80, "variety": 88, "event_calendar": 90,
+    # ── Global news & wire agencies ──
+    "reuters": 97, "associated press": 96, "ap news": 96, "afp": 95, "bbc news": 94,
+    "the guardian": 91, "the new york times": 91, "the washington post": 90, "al jazeera": 89,
+    "bloomberg": 91, "the wall street journal": 90, "cnn": 86, "sky news": 87, "dw": 88,
+    "france 24": 87, "the independent": 85, "nbc news": 87, "abc news": 87, "cbs news": 86,
+    "the times": 85,
+
+    # ── Indian national news ──
+    "the hindu": 92, "the indian express": 92, "indian express": 92, "ndtv": 87,
+    "hindustan times": 87, "times of india": 84, "the times of india": 84, "india today": 85,
+    "mint": 88, "the economic times": 87, "business standard": 87, "the print": 84,
+    "scroll.in": 85, "the wire": 82, "deccan herald": 85, "the telegraph india": 84,
+    "news18": 80, "india tv": 70, "aaj tak": 79, "abp news": 79, "zee news": 70,
+    "firstpost": 72, "the quint": 81, "moneycontrol": 84, "pti": 93, "ani": 86,
+
+    # ── Official & government sources ──
+    "pib": 96, "press information bureau": 96, "mygov": 94, "india.gov.in": 95, "eci": 98,
+    "election commission of india": 98, "imd": 98, "india meteorological department": 98,
+    "ndma": 97, "national disaster management authority": 97, "isro": 98,
+    "ministry of home affairs": 97, "ministry of health and family welfare": 97,
+    "ministry of external affairs": 97, "supreme court of india": 98, "rbi": 98, "nasa": 98,
+    "who": 97, "un": 95, "unicef": 95,
+
+    # ── Cricket & sports ──
+    "espncricinfo": 96, "cricbuzz": 93, "icc": 98, "bcci": 98, "fifa": 98, "olympics.com": 97,
+    "olympic committee": 97, "the athletic": 89, "bbc sport": 91, "sky sports": 90,
+    "sportstar": 88, "sportskeeda": 70, "goal.com": 83, "espn": 91, "nba.com": 97,
+
+    # ── Gaming & esports ──
+    "ign": 88, "polygon": 85, "gamespot": 85, "pc gamer": 85, "eurogamer": 86, "the verge": 87,
+    "kotaku": 80, "rock paper shotgun": 84, "dexerto": 78, "esports insider": 82,
+    "liquipedia": 88, "steam": 98, "playstation blog": 96, "xbox wire": 96, "nintendo": 97,
+    "riot games": 97, "valve": 97, "pubg esports": 96, "esports world cup": 95,
+
+    # ── Movies, TV & entertainment ──
+    "variety": 91, "hollywood reporter": 90, "deadline": 89, "the hollywood reporter": 90,
+    "bollywood hungama": 78, "pinkvilla": 73, "film companion": 82,
+    "indian express entertainment": 87, "peeping moon": 70, "koimoi": 70,
+    "box office india": 80, "imdb": 70, "rottentomatoes": 70, "letterboxd": 65,
+    "netflix": 98, "prime video": 97, "disney+": 97, "jiohotstar": 97,
+    "amazon mgm studios": 96, "warner bros": 96, "marvel": 97, "dc": 95,
+    "yash raj films": 96, "dharma productions": 95, "t-series": 95,
+
+    # ── Festivals, holidays & occasions ──
+    "event_calendar": 90, "timeanddate": 90, "drik panchang": 90, "india.gov.in calendar": 95,
+    "pib festival announcement": 96, "incredible india": 93, "un tourism": 93, "un days": 96,
+    "official festival website": 96, "state tourism department": 94, "state government": 95,
+    "local municipal corporation": 94,
+
+    # ── Viral trends & social media ──
+    "google trends": 92, "youtube trends": 90, "youtube official": 96, "instagram": 70,
+    "instagram official account": 92, "x": 70, "x verified official account": 92,
+    "reddit": 60, "tiktok": 65, "meta newsroom": 97, "youtube blog": 95,
+    "trend discovery engine": 70,
+
+    # ── Fact-checking ──
+    "alt news": 90, "boom live": 90, "factly": 89, "vishvas news": 87, "afp fact check": 94,
+    "reuters fact check": 96, "ap fact check": 95, "snopes": 90, "politifact": 90,
+    "full fact": 90,
+
+    # ── Science, health & weather ──
+    "nature": 96, "science": 96, "scientific american": 90, "lancet": 96, "pubmed": 95,
+    "cdc": 96, "imd weather alerts": 98, "usgs": 97, "noaa": 97, "esa": 97,
+
+    # ── Tragedies, accidents & emergencies ──
+    "local police official": 97, "district administration": 97, "state disaster authority": 97,
+    "fire department official": 96, "official hospital statement": 95,
+    "official airline statement": 95, "railway ministry": 97, "indian railways": 97,
+    "national transport safety authority": 97,
+
+    # ── Business & technology ──
+    "techcrunch": 85, "wired": 87, "arstechnica": 88, "cnbc": 87, "forbes": 82, "fortune": 84,
+    "yahoo finance": 83, "financial times": 92, "the information": 86,
+    "official company newsroom": 96,
 }
 DEFAULT_CREDIBILITY = 50
 
@@ -190,5 +259,3 @@ PUBLISHER_ALIASES = {
     "cnn-news18": "News18", "news18": "News18", "ign india": "IGN",
 }
 
-# Official / announcement sources the scorer should know (publisher name lowercase -> 0-100).
-CREDIBILITY.update({"playstation blog": 85, "xbox wire": 85, "icc": 95, "bcci": 95, "the economic times": 82})
