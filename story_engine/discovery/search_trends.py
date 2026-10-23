@@ -47,7 +47,8 @@ def to_candidate(item, now):
         if n.lower() in seen:
             continue
         seen.add(n.lower())
-        sources.append({"name": n, "url": a["url"], "published_at": item.get("observed_at") or now, "observed": True})
+        sources.append({"name": n, "url": a["url"], "published_at": item.get("observed_at") or now, "observed": True,
+                        "title": str(a.get("title") or "")[:300]})
     cat = classify(f"{main['title']} {item.get('title', '')}")
     c = candidate(cat, main["title"], sources, traffic_signal(item.get("approx_traffic_numeric")))
     if c:
