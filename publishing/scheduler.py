@@ -286,12 +286,19 @@ class Worker:
         if self.engagement_events is None:
             return
         from datetime import datetime
-        for tg in self._principals():
+        principals = list(self._principals())
+        logger.info("engagement: %d owner(s) with an autopilot feature on", len(principals))
+        for tg in principals:
             settings = self.autopilot.get(tg)
             if settings.get("paused") or not (settings.get("auto_replies") or settings.get("auto_comments")):
+                logger.info("engagement: owner %s skipped (paused=%s auto_replies=%s auto_comments=%s)",
+                            tg.owner_id, settings.get("paused"), settings.get("auto_replies"),
+                            settings.get("auto_comments"))
                 continue
             acct = self.accounts.get_for(tg)
             if not acct or acct.get("status") != "active":
+                logger.info("engagement: owner %s skipped (account %s)", tg.owner_id,
+                            (acct or {}).get("status", "not connected"))
                 continue
             try:
                 ig_id, token = self.accounts.get_token_for(tg)
@@ -300,6 +307,9 @@ class Worker:
             except Exception:
                 logger.exception("Could not load Instagram media for engagement owner %s", tg.owner_id)
                 continue
+            logger.info("engagement: owner %s (@%s) has %d recent post(s); auto_replies=%s auto_comments=%s",
+                        tg.owner_id, username, len(media), settings.get("auto_replies"),
+                        settings.get("auto_comments"))
             replies_sent = 0
             starter_sent = False
             recent_cutoff = self.clock() - timedelta(hours=24)
@@ -341,16 +351,22 @@ class Worker:
                 except Exception:
                     logger.exception("Could not list comments for media %s", media_id)
                     continue
+                skipped = {"empty": 0, "own": 0, "seen": 0, "old": 0}
                 for comment in comments:
                     if replies_sent >= 3 or replies_today >= 10:
                         break
                     cid = str(comment.get("id") or "")
                     text_in = str(comment.get("text") or "").strip()
                     commenter = str(comment.get("username") or "").lstrip("@").lower()
-                    if not cid or not text_in or (username and commenter == username):
+                    if not cid or not text_in:
+                        skipped["empty"] += 1
+                        continue
+                    if username and commenter == username:
+                        skipped["own"] += 1
                         continue
                     key = "reply:" + cid
                     if self._engagement_seen(tg, key):
+                        skipped["seen"] += 1
                         continue
                     # Only automatically respond to comments from the last 24 hours.
                     try:
@@ -358,6 +374,7 @@ class Worker:
                         if stamp.tzinfo is None:
                             stamp = stamp.replace(tzinfo=timezone.utc)
                         if (self.clock() - stamp).total_seconds() > 86400:
+                            skipped["old"] += 1
                             continue
                     except (ValueError, TypeError):
                         continue
@@ -369,8 +386,11 @@ class Worker:
                         self._engagement_mark(tg, key, "comment_reply", str(result.get("id") or ""))
                         replies_sent += 1
                         replies_today += 1
+                        logger.info("engagement: replied to comment %s on media %s", cid, media_id)
                     except Exception:
                         logger.exception("AI reply failed for comment %s", cid)
+                logger.info("engagement: media %s -> %d comment(s) returned, skipped %s, replies sent %d",
+                            media_id, len(comments), skipped, replies_sent)
 
     # ---- autofill --------------------------------------------------------
     def _detections(self, tg, assets):
