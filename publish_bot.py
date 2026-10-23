@@ -114,29 +114,10 @@ def build_runtime(db, content_buffer, bot_token):
         model=getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b"),
         tz_for=tz_for,
     )
-    from functools import partial
-    from trends.auto_story import TrendStoryConfig
-    from trends.classifier import make_groq_classifier
-    from trends.sources.combined import make_fetch as make_trend_fetch
-    region = getattr(app_settings, "TREND_REGION", "IN")
-    classifier = make_groq_classifier(
-        getattr(app_settings, "GROQ_API_KEY", ""),
-        getattr(app_settings, "TREND_MODEL", getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b")))
     from engagement.openrouter_ai import OpenRouterAI
     engagement_ai = OpenRouterAI(
         getattr(app_settings, "OPENROUTER_API_KEY", ""),
         getattr(app_settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
-    trend_cfg = TrendStoryConfig(
-        ai=engagement_ai, smart=getattr(app_settings, "TREND_SMART", True),
-        allow_solemn=getattr(app_settings, "TREND_ALLOW_SOLEMN", True),
-        fetch=make_trend_fetch(
-            region, 20,
-            gnews_key=getattr(app_settings, "GNEWS_API_KEY", ""),
-            reddit_id=getattr(app_settings, "REDDIT_CLIENT_ID", ""),
-            reddit_secret=getattr(app_settings, "REDDIT_CLIENT_SECRET", "")),
-        classifier=classifier,
-        brand=getattr(app_settings, "TREND_BRAND", "VIBEOS"),
-        show_headline=getattr(app_settings, "TREND_SHOW_HEADLINE", True))
     engagement_events = db["engagement_events"]
     # Web publishing is opt-in (WEB_PUBLISHING=1). Until then web-owned jobs are
     # never claimed, exactly as before.
@@ -147,7 +128,7 @@ def build_runtime(db, content_buffer, bot_token):
     worker = Worker(service, accounts, autopilot, calendar, content_buffer,
                     notify=lambda tg, text: send_telegram(bot_token, tg, text),
                     refresh_days=cfg.refresh_before_days, planner=planner,
-                    trend_cfg=trend_cfg, engagement_ai=engagement_ai,
+                    trend_every=600.0, engagement_ai=engagement_ai,
                     engagement_events=engagement_events, web_owners=web_publishing)
     worker.story_db = db     # lets the worker cancel story-library jobs whose trend expired (step 11)
 
