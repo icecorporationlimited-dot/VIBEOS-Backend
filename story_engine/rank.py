@@ -1,5 +1,7 @@
 """Step 3c — apply gate + score to every pending/hold trend in MongoDB."""
 import logging
+import re
+from collections import Counter
 from datetime import datetime, timezone
 
 from . import scoring, verify
@@ -11,6 +13,7 @@ log = logging.getLogger(__name__)
 def process(db, now=None, limit=500) -> dict:
     now = now or datetime.now(timezone.utc)
     stats = {"verified": 0, "hold": 0, "rejected": 0}
+    why = Counter()
     rows = db[TRENDS].find({"verification_status": {"$in": ["pending", "hold"]}}).limit(limit)
     for t in rows:
         g = verify.gate(t, now)
@@ -23,7 +26,11 @@ def process(db, now=None, limit=500) -> dict:
             upd["trend_score"], upd["score_parts"] = s["score"], s["parts"]
         db[TRENDS].update_one({"trend_id": t["trend_id"]}, {"$set": upd})
         stats[g["status"]] += 1
+        if g["status"] != "verified":
+            for x in g["reasons"][:1]:                       # first reason only, numbers stripped for grouping
+                why[re.sub(r"\d+", "N", x)[:60]] += 1
     log.info("verify/score: %s", stats)
+    log.info("not-verified reasons: %s", dict(why.most_common(6)))
     return stats
 
 
