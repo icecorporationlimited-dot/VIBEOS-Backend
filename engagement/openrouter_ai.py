@@ -4,12 +4,15 @@ This provider is intentionally separate from Groq. Keep OPENROUTER_API_KEY in
 private deployment settings; never commit credentials or log request headers.
 """
 import logging
+import os
 import re
+import time
 
 import requests
 
 logger = logging.getLogger(__name__)
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"   # OpenAI-compatible, same request format
 MAX_REPLY_CHARS = 900
 
 
@@ -18,11 +21,12 @@ class OpenRouterError(RuntimeError):
 
 
 class OpenRouterAI:
-    def __init__(self, api_key, model="openai/gpt-4o-mini", timeout=25, http=None):
+    def __init__(self, api_key, model="openai/gpt-4o-mini", timeout=25, http=None, api_url=None):
         self.api_key = str(api_key or "").strip()
         self.model = str(model or "openai/gpt-4o-mini").strip()
         self.timeout = max(5, min(int(timeout), 60))
         self.http = http or requests
+        self.api_url = api_url or API_URL
 
     @property
     def ready(self):
@@ -60,7 +64,7 @@ class OpenRouterAI:
         )
         try:
             response = self.http.post(
-                API_URL,
+                self.api_url,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
@@ -95,20 +99,29 @@ class OpenRouterAI:
         return answer[:limit]
 
     def chat(self, system, user, *, temperature=0.5, max_tokens=400):
-        """Generic single-turn completion (used by the Story planner). Returns raw text."""
+        """Generic single-turn completion (used by the Story planner). Returns raw text.
+        Works with any OpenAI-compatible endpoint (OpenRouter / Groq via api_url). Retries on 429."""
         if not self.ready:
-            raise OpenRouterError("OPENROUTER_API_KEY is not configured.")
+            raise OpenRouterError("API key is not configured.")
         try:
-            response = self.http.post(
-                API_URL,
-                headers={"Authorization": f"Bearer {self.api_key}",
-                         "Content-Type": "application/json", "X-OpenRouter-Title": "VIBEOS"},
-                json={"model": self.model,
-                      "messages": [{"role": "system", "content": str(system)[:4000]},
-                                   {"role": "user", "content": str(user)[:6000]}],
-                      "temperature": max(0.0, min(float(temperature), 1.0)),
-                      "max_tokens": max(50, min(int(max_tokens), 800))},
-                timeout=self.timeout)
+            for attempt in range(3):
+                response = self.http.post(
+                    self.api_url,
+                    headers={"Authorization": f"Bearer {self.api_key}",
+                             "Content-Type": "application/json"},
+                    json={"model": self.model,
+                          "messages": [{"role": "system", "content": str(system)[:4000]},
+                                       {"role": "user", "content": str(user)[:6000]}],
+                          "temperature": max(0.0, min(float(temperature), 1.0)),
+                          "max_tokens": max(50, min(int(max_tokens), 800))},
+                    timeout=self.timeout)
+                if response.status_code != 429 or attempt == 2:
+                    break
+                try:
+                    wait = float(response.headers.get("retry-after", 3))
+                except (TypeError, ValueError):
+                    wait = 3.0
+                time.sleep(max(1.0, min(wait, 20.0)))       # rate limit: wait, then try again
             response.raise_for_status()
             choices = response.json().get("choices") or []
             return (choices[0].get("message", {}).get("content") if choices else "") or ""
@@ -116,8 +129,8 @@ class OpenRouterAI:
             resp = getattr(exc, "response", None)
             code = getattr(resp, "status_code", "?")
             body = (getattr(resp, "text", "") or "")[:200]
-            logger.warning("OpenRouter chat failed (%s) status=%s body=%s", type(exc).__name__, code, body)
-            raise OpenRouterError("OpenRouter request failed; check key, model and quota.") from None
+            logger.warning("LLM chat failed (%s) status=%s body=%s", type(exc).__name__, code, body)
+            raise OpenRouterError("LLM request failed; check key, model and quota.") from None
 
     @staticmethod
     def _clean(value, limit):
@@ -125,3 +138,20 @@ class OpenRouterAI:
         text = str(value or "")
         text = "".join(ch for ch in text if ch in "\n\t" or ord(ch) >= 32)
         return text.strip()[:limit]
+
+
+def build_llm(settings=None):
+    """One place that decides which provider every VIBEOS service uses.
+    GROQ_API_KEY set  -> Groq (model: GROQ_TEXT_MODEL, default llama-3.3-70b-versatile).
+    otherwise         -> OpenRouter (old behaviour).
+    Each Render service reads ITS OWN GROQ_API_KEY, so different services can use different Groq accounts."""
+    def conf(name, default=""):
+        v = os.environ.get(name)
+        if v:
+            return v.strip()
+        return str(getattr(settings, name, "") or default).strip() if settings is not None else default
+
+    groq = conf("GROQ_API_KEY")
+    if groq and not groq.startswith("your_"):
+        return OpenRouterAI(groq, conf("GROQ_TEXT_MODEL", "llama-3.3-70b-versatile"), api_url=GROQ_URL)
+    return OpenRouterAI(conf("OPENROUTER_API_KEY"), conf("OPENROUTER_MODEL", "openai/gpt-4o-mini"))
