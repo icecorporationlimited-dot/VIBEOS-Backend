@@ -154,6 +154,7 @@ class PolicyEngine:
     def _blocked_topic(self, job, topics):
         if not topics:
             return None
+        from story_engine import safety              # lazy: keeps publishing importable without story_engine deps
         parts = []
         for aid in job["asset_ids"]:
             asset = self.buffer.assets.find_one({"_id": aid}) or {}
@@ -161,11 +162,15 @@ class PolicyEngine:
             if job["format"] != "story":   # stories are posted without caption
                 parts.append(svc.build_caption(creative))
             parts.append(" ".join(f"#{str(t).lstrip('#')}" for t in creative.get("hashtags") or []))
-        text = " ".join(parts).lower()
-        for topic in topics:
-            if re.search(r"(?<!\w)" + re.escape(topic) + r"(?!\w)", text):
-                return topic
-        return None
+            if job["format"] == "story":
+                # A trend Story has no caption/hashtags: what the reader sees is the card text, so check the
+                # trend headline, the card copy and the publishers' headlines that queue_story stored with it.
+                dec = (asset.get("route") or {}).get("decision") or {}
+                parts.append((asset.get("analysis") or {}).get("trend_title") or "")
+                parts.append(dec.get("trend_title") or "")
+                parts.append(" ".join(str(x) for x in dec.get("copy") or []))
+                parts.append(" ".join(str(x) for x in dec.get("source_titles") or []))
+        return safety.topic_hit(topics, *parts)
 
     def _duplicate_of(self, job):
         digest = job.get("content_hash")
