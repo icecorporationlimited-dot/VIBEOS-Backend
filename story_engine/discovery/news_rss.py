@@ -8,7 +8,7 @@ import logging
 import xml.etree.ElementTree as ET
 from datetime import timezone
 from email.utils import parsedate_to_datetime
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 from .base import candidate, similar
 
@@ -24,6 +24,37 @@ QUERIES = {
     "news": "india top news",
 }
 URL = "https://news.google.com/rss/search?q={q}+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+# Fallback when Google blocks the server IP (common on cloud hosts): Bing News RSS, same idea.
+BING_URL = "https://www.bing.com/news/search?q={q}&format=rss&setmkt=en-IN&qft=sortbydate%3d%221%22"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*;q=0.8",
+            "Accept-Language": "en-IN,en;q=0.9"}
+
+
+def _parse_bing(xml_text: str):
+    out = []
+    root = ET.fromstring(xml_text)
+    for it in root.iter("item"):
+        title = (it.findtext("title") or "").strip()
+        link = (it.findtext("link") or "").strip()
+        pub = ""
+        for c in it:
+            if isinstance(c.tag, str) and c.tag.rsplit("}", 1)[-1].lower() == "source":
+                pub = (c.text or "").strip()
+        real = parse_qs(urlparse(link).query).get("url")      # Bing wraps the real link in ?url=
+        if real:
+            link = real[0]
+        when = None
+        try:
+            when = parsedate_to_datetime(it.findtext("pubDate"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            pass
+        if title and link.startswith("http") and pub:
+            out.append({"title": title, "name": pub, "url": link, "published_at": when})
+    return out
 
 
 def _parse(xml_text: str):
@@ -48,16 +79,28 @@ def _parse(xml_text: str):
     return out
 
 
+def _get_articles(category, query, http, limit):
+    """Google News first, Bing News if Google fails. Logs the real HTTP status."""
+    attempts = (("google", URL, _parse), ("bing", BING_URL, _parse_bing))
+    for name, tmpl, parser in attempts:
+        try:
+            r = http.get(tmpl.format(q=quote_plus(query)), timeout=15, headers=_HEADERS)
+            r.raise_for_status()
+            arts = parser(r.text)[:limit]
+            if arts:
+                return arts
+            log.warning("news_rss %s [%s]: 0 items", category, name)
+        except Exception as exc:
+            code = getattr(getattr(exc, "response", None), "status_code", "?")
+            log.warning("news_rss %s [%s] failed: %s status=%s", category, name, type(exc).__name__, code)
+    return []
+
+
 def fetch_category(category: str, query: str, http=None, limit: int = 30):
     import requests
     http = http or requests
-    try:
-        r = http.get(URL.format(q=quote_plus(query)), timeout=15,
-                     headers={"User-Agent": "Mozilla/5.0 (VIBEOS story engine)"})
-        r.raise_for_status()
-        arts = _parse(r.text)[:limit]
-    except Exception as exc:
-        log.warning("news_rss %s failed: %s", category, type(exc).__name__)
+    arts = _get_articles(category, query, http, limit)
+    if not arts:
         return []
     # group similar headlines into one event; more publishers + earlier rank = stronger signal
     groups = []
