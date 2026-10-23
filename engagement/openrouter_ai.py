@@ -82,7 +82,10 @@ class OpenRouterAI:
             choices = payload.get("choices") or []
             answer = choices[0].get("message", {}).get("content") if choices else ""
         except Exception as exc:
-            logger.warning("OpenRouter reply generation failed (%s)", type(exc).__name__)
+            resp = getattr(exc, "response", None)
+            code = getattr(resp, "status_code", "?")
+            body = (getattr(resp, "text", "") or "")[:200]
+            logger.warning("OpenRouter reply generation failed (%s) status=%s body=%s", type(exc).__name__, code, body)
             raise OpenRouterError("OpenRouter request failed; check key, model and quota.") from None
 
         answer = self._clean(answer, limit).strip(" \"'\n\t")
@@ -110,7 +113,10 @@ class OpenRouterAI:
             choices = response.json().get("choices") or []
             return (choices[0].get("message", {}).get("content") if choices else "") or ""
         except Exception as exc:
-            logger.warning("OpenRouter chat failed (%s)", type(exc).__name__)
+            resp = getattr(exc, "response", None)
+            code = getattr(resp, "status_code", "?")
+            body = (getattr(resp, "text", "") or "")[:200]
+            logger.warning("OpenRouter chat failed (%s) status=%s body=%s", type(exc).__name__, code, body)
             raise OpenRouterError("OpenRouter request failed; check key, model and quota.") from None
 
     @staticmethod
