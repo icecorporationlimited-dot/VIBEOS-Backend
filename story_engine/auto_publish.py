@@ -18,12 +18,14 @@ from datetime import datetime, timedelta, timezone
 
 from publishing.identity import owner_filter
 from . import feed
-from .db import FEED
+from .db import FEED, TRENDS
+from . import safety
 from .publishing_integration import StoryPublishError, queue_story
 
 log = logging.getLogger(__name__)
 
 MAX_PER_DAY = int(os.environ.get("STORY_AUTO_MAX_PER_DAY", "1"))     # per user, rolling 24h
+MAX_PICKS = 5                                                         # blocked-topic skips tried per run
 _OPEN_STATUSES = ["queued", "retry", "held", "needs_reauth", "needs_attention", "running"]
 
 
@@ -45,8 +47,22 @@ def has_open_story_job(jobs, principal) -> bool:
                           "status": {"$in": _OPEN_STATUSES}}) is not None
 
 
-def publish_one(db, buffer, service, principal, now=None, max_per_day=None):
-    """Pick + queue at most one story for this owner. Returns a dict, or None if nothing was queued."""
+def blocked_by_user(db, entry, blocked_topics):
+    """The user's own blocked topic found in the headline, any publisher headline or the story text, else None."""
+    if not blocked_topics:
+        return None
+    trend = db[TRENDS].find_one({"trend_id": entry.get("trend_id")}) or {}
+    titles = [t for _, t in safety.source_headlines(trend)]
+    return safety.topic_hit(blocked_topics, entry.get("trend_title"), trend.get("title"),
+                            " ".join(entry.get("copy") or []), *titles)
+
+
+def publish_one(db, buffer, service, principal, now=None, max_per_day=None, blocked_topics=None):
+    """Pick + queue at most one story for this owner. Returns a dict, or None if nothing was queued.
+
+    blocked_topics: the owner's autopilot `blocked_topics`. A story that mentions one is skipped here (and
+    never queued), so a policy HOLD can not sit in the queue and block every later story.
+    """
     now = now or _now()
     cap = MAX_PER_DAY if max_per_day is None else max_per_day
     user_id = principal.subject                      # same key queue_story/feed use
@@ -55,9 +71,19 @@ def publish_one(db, buffer, service, principal, now=None, max_per_day=None):
     if has_open_story_job(service.jobs, principal):
         return None                                  # one at a time; never pile up
 
-    entry = feed.pick_for_user(db, user_id, now=now)
+    entry = None
+    for _ in range(MAX_PICKS):
+        entry = feed.pick_for_user(db, user_id, now=now)
+        if not entry:
+            return None                              # library has nothing ready for this user yet
+        hit = blocked_by_user(db, entry, blocked_topics)
+        if not hit:
+            break
+        log.info("auto story %s skipped for %s: blocked topic %r", entry["story_asset_id"], user_id, hit)
+        feed.mark(db, user_id, entry["trend_id"], "skipped")
+        entry = None
     if not entry:
-        return None                                  # library has nothing ready for this user yet
+        return None
     try:
         out = queue_story(db, buffer, service, principal, entry["story_asset_id"], None)
     except StoryPublishError as exc:
