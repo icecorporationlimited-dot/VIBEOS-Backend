@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from . import config as cfg
 from .db import ASSETS, IMAGES, TRENDS
-from .discovery.base import tokens
+from .discovery.base import _STOP, tokens
 
 log = logging.getLogger(__name__)
 REQUIRED = ("image_url", "source_url", "creator", "license", "attribution_required", "verified_at")
@@ -95,9 +95,30 @@ def usable(rec) -> bool:
 
 
 def search_query(trend):
+    """Named people/teams first (max 2). Otherwise the headline's own words IN ORDER (was: alphabetical, which
+    gave random words like 'chandelier'-type matches)."""
     ctx = trend.get("context") or {}
-    words = list(ctx.get("who") or []) or sorted(tokens(trend.get("title", "")))[:4]
+    who = [w for w in (ctx.get("who") or []) if w][:2]
+    if who:
+        return " ".join(who)
+    words, seen = [], set()
+    for w in re.findall(r"[\w']+", trend.get("title", "")):
+        lw = w.lower()
+        if lw in _STOP or len(lw) < 3 or lw in seen:
+            continue
+        seen.add(lw)
+        words.append(w)
     return " ".join(words[:4])
+
+
+def mentions_entity(rec, trend) -> bool:
+    """If the headline names people/teams, the image's own caption must contain ALL words of at least one of them.
+    No caption match -> no photo (a generic background is safer than a wrong face)."""
+    who = [w for w in ((trend.get("context") or {}).get("who") or []) if w]
+    if not who:
+        return True
+    text = tokens(rec.get("text", ""))
+    return any(tokens(w) and tokens(w) <= text for w in who)
 
 
 def _score(rec, qtokens):
@@ -120,7 +141,7 @@ def pick_image(trend, http=None):
             log.exception("image provider %s failed", name)       # one broken provider never stops the rest
             continue
         for r in recs:
-            if not usable(r):
+            if not usable(r) or not mentions_entity(r, trend):
                 continue
             s = _score(r, qt)
             if s > best_s:
