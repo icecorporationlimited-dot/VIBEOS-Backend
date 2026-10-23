@@ -203,9 +203,8 @@ def handle_reel(job, db):
 # ------------------------------------------------------------------ smart_story
 def _ai():
     import settings
-    from engagement.openrouter_ai import OpenRouterAI
-    return OpenRouterAI(getattr(settings, "OPENROUTER_API_KEY", ""),
-                        getattr(settings, "OPENROUTER_MODEL", "openai/gpt-4o-mini"))
+    from engagement.openrouter_ai import build_llm
+    return build_llm(settings)
 
 
 def handle_smart_story(job, db):
