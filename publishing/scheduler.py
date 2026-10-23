@@ -262,8 +262,11 @@ class Worker:
         return {"owner_id": principal.owner_id}
 
     def _engagement_seen(self, principal, key):
-        return bool(self.engagement_events and self.engagement_events.find_one({
-            **self._engagement_owner(principal), "event_key": key}))
+        # pymongo Collection has no truth value (bool(col) raises), so compare with None.
+        if self.engagement_events is None:
+            return False
+        return self.engagement_events.find_one({
+            **self._engagement_owner(principal), "event_key": key}) is not None
 
     def _engagement_mark(self, principal, key, kind, result_id=""):
         if self.engagement_events is None:
