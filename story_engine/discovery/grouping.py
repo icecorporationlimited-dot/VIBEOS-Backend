@@ -25,7 +25,8 @@ def group_articles(arts):
     """
     groups = []
     for rank, a in enumerate(arts):
-        src = {"name": canon_publisher(a["name"]), "url": a["url"], "published_at": aware(a.get("published_at"))}
+        src = {"name": canon_publisher(a["name"]), "url": a["url"], "published_at": aware(a.get("published_at")),
+               "title": str(a.get("title") or "")[:300]}      # publisher's OWN headline: used by verify cross-checks
         for g in groups:
             if similar(g["title"], a["title"]):
                 if src["name"].lower() not in {s["name"].lower() for s in g["sources"]}:
