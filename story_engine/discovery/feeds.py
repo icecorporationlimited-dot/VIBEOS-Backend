@@ -118,7 +118,7 @@ def feed_candidates(feed, items, now):
     out = []
     for age, title, url, when in fresh[: cfg.FEED_MAX_ITEMS]:
         cat = feed["category"] if feed["category"] not in cfg.GENERIC_CATEGORIES else classify(title, feed["category"])
-        c = candidate(cat, title, [{"name": name, "url": url, "published_at": when}],
+        c = candidate(cat, title, [{"name": name, "url": url, "published_at": when, "title": title[:300]}],
                       signal_for(max(age, 0), feed.get("official")), published_at=when)
         if c:
             c["official"] = bool(feed.get("official"))
