@@ -33,7 +33,7 @@ def _owned(principal):
 def eligible_photo_count(db, principal) -> int:
     from publishing.identity import owner_filter
     ids = set()
-    rows = list(db["publish_jobs"].find({**owner_filter(principal), "format": {"$in": ["photo", "story"]},
+    rows = list(db["publish_jobs"].find({**owner_filter(principal), "format": {"$in": ["photo", "story", "carousel"]},
                                          "status": {"$in": ["queued", "retry", "held"]},
                                          "scheduled_at": {"$ne": None}}))
     for pj in rows[:60]:
