@@ -31,11 +31,15 @@ def _cutout(image):
     global _SESSION
     if os.getenv("COLLAGE_CUTOUTS", "1").lower() in ("0", "false", "off", "no"):
         return None
+    from . import budget
+    if not budget.have(35):                                        # cutouts are decoration: skip when late
+        log.info("collage cutout skipped: %.0fs budget left", budget.remaining())
+        return None
     try:
         from rembg import remove, new_session
         if _SESSION is None:
             _SESSION = new_session(os.getenv("COLLAGE_REMBG_MODEL", "u2netp"))
-        small = image.copy(); small.thumbnail((640, 640))          # keeps peak RAM low on a 512 MB worker
+        small = image.copy(); small.thumbnail((384, 384))          # keeps peak RAM low on a 512 MB worker
         raw = io.BytesIO(); small.save(raw, format="PNG")
         out = Image.open(io.BytesIO(remove(raw.getvalue(), session=_SESSION))).convert("RGBA")
         bbox = out.getchannel("A").point(lambda a: 255 if a > 40 else 0).getbbox()

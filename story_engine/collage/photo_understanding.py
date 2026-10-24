@@ -92,7 +92,7 @@ def groq_describe(raw):
               "quality_score(0-1), category (fashion/kpop/friends/festival/nature/cricket/other). "
               "Do not identify people. JSON only.")
     r = requests.post("https://api.groq.com/openai/v1/chat/completions",
-                      headers={"Authorization": "Bearer " + key}, timeout=25,
+                      headers={"Authorization": "Bearer " + key}, timeout=(5, 15),
                       json={"model": model, "temperature": 0.2, "max_tokens": 220,
                             "messages": [{"role": "user", "content": [{"type": "text", "text": prompt},
                                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(b.getvalue()).decode()}}]}]})

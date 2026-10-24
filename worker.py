@@ -32,7 +32,7 @@ IDLE_SLEEP = 1.0                      # seconds between polls when the queue is 
 CLEANUP_EVERY = 900                   # seconds between blob / rejected-asset sweeps
 REJECTED_BLOB_DAYS = 7
 # Per-type hard limit for the child process; must be < jobs.DEFAULT_LEASE_SECONDS.
-TIMEOUTS = {"reel": 340, "prepare_ready": 120, "edit": 120, "smart_story": 90, "story_card": 60, "collage_story": 150}
+TIMEOUTS = {"reel": 340, "prepare_ready": 120, "edit": 120, "smart_story": 90, "story_card": 60, "collage_story": 200}
 
 _stop = False
 
@@ -77,12 +77,23 @@ def _run_in_subprocess(job) -> tuple[bool, str]:
     try:
         proc = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True,
                               timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        _relay(exc.stderr, job)                 # shows how far the child got before it was killed
         return False, f"timeout after {timeout}s"
+    _relay(proc.stderr, job)
     if proc.returncode == 0:
         return True, ""
     tail = (proc.stderr or "").strip().splitlines()[-1:] or [f"exit code {proc.returncode}"]
     return False, tail[0]
+
+
+def _relay(stderr, job):
+    """Child output is captured, so forward its log lines to the worker log (otherwise they are lost)."""
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", "replace")
+    lines = [l for l in (stderr or "").splitlines() if l.strip()][-40:]
+    for line in lines:
+        logger.info("[%s] %s", job["_id"][:8], line)
 
 
 def _sweep(db, types):

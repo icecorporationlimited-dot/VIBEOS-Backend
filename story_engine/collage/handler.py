@@ -17,6 +17,8 @@ def handle_collage_story(job, db):
     from .collage_layouts import load_layout
     from .collage_renderer import render
     from .collage_validator import validate
+    from . import budget
+    budget.reset()
 
     p = job["payload"]
     raw_principal = p.get("principal")
@@ -56,14 +58,19 @@ def handle_collage_story(job, db):
         rows.append({"asset_id": aid, "blob_id": asset.get("blob_id"), "status": "ready", "scheduled_at": sched,
                      "bytes": raw, "filename": asset.get("filename"), "source": asset.get("source")})
 
-    photos = select_photos(rows, 5)
+    budget.log.info("collage: loaded %d candidate photos in %.1fs", len(rows), budget.elapsed())
+    with budget.stage("select"):
+        photos = select_photos(rows, 5)
     del rows
     if len(photos) < 3:
         raise ValueError("Need 3+ owned, ready photos linked to real scheduled jobs (or explicit asset IDs).")
     theme, category = choose_theme(photos, p.get("theme"))
-    trend = trend_context(category)
-    copy = write_copy(category, theme, trend)
-    png = render(photos, theme, copy, load_layout(theme, len(photos)))
+    with budget.stage("trends"):
+        trend = trend_context(category)
+    with budget.stage("copy"):
+        copy = write_copy(category, theme, trend)
+    with budget.stage("render"):
+        png = render(photos, theme, copy, load_layout(theme, len(photos)))
     check = validate(png, copy, len(photos))
     if not check["valid"]:
         raise ValueError("Collage validation failed: " + ",".join(check["errors"]))

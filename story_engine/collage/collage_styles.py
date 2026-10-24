@@ -90,12 +90,16 @@ def cut_mask(tile):
     """Subject mask (L, same size as tile) via rembg, or None. Never raises."""
     if os.getenv("COLLAGE_CUTOUTS", "1").lower() in ("0", "false", "off", "no"):
         return None
+    from . import budget
+    if not budget.have(35):                                        # cutouts are decoration: skip when late
+        log.info("cutout skipped: %.0fs budget left", budget.remaining())
+        return None
     try:
         from . import collage_renderer as cr
         from rembg import remove, new_session
         if cr._SESSION is None:
             cr._SESSION = new_session(os.getenv("COLLAGE_REMBG_MODEL", "u2netp"))
-        small = tile.copy(); small.thumbnail((640, 640)); raw = io.BytesIO(); small.save(raw, "PNG")
+        small = tile.copy(); small.thumbnail((384, 384)); raw = io.BytesIO(); small.save(raw, "PNG")
         a = Image.open(io.BytesIO(remove(raw.getvalue(), session=cr._SESSION))).convert("RGBA").getchannel("A")
         if sum(a.resize((16, 16)).tobytes()) < 0.06 * 255 * 256:     # < 6% subject => failed cut
             return None

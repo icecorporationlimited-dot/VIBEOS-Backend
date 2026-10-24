@@ -28,7 +28,7 @@ def write_copy(category, theme, trend):
                       f"Photo category={category}, visual style={theme}. {hint}")
             r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": "Bearer " + key},
                               json={"model": model, "temperature": 0.8, "max_tokens": 90,
-                                    "messages": [{"role": "user", "content": prompt}]}, timeout=18)
+                                    "messages": [{"role": "user", "content": prompt}]}, timeout=(5, 10))
             r.raise_for_status()
             t = r.json()["choices"][0]["message"]["content"]; a, b = t.find("{"), t.rfind("}")
             d = json.loads(t[a:b + 1]); text = str(d.get("text", "")).strip()[:100]

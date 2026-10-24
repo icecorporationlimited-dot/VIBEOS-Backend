@@ -4,10 +4,12 @@ Stage 1: measure every candidate cheaply (no network). Stage 2: ask the vision m
 (keeps Groq calls and RAM low). Final score = measured quality, nudged by the vision model's opinion.
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from . import budget
 from .photo_understanding import inspect_photo, groq_describe
 
 log = logging.getLogger(__name__)
-VISION_TOP = 8          # at most this many Groq vision calls per collage
+VISION_TOP = 5          # at most this many Groq vision calls per collage
 DUP_DISTANCE = 6        # aHash Hamming distance <= this => near-duplicate
 
 
@@ -35,11 +37,20 @@ def select_photos(items, max_photos=5):
         f["bytes"] = x["bytes"]
         cands.append(f)
     cands.sort(key=lambda c: c["technical_quality"], reverse=True)
-    for f in cands[:VISION_TOP]:
-        try:
-            f.update(groq_describe(f["bytes"]))
-        except Exception:
-            log.info("collage: vision skipped for %s", f.get("asset_id"))
+    top = cands[:VISION_TOP]
+    if top and budget.have(60):                       # vision is optional: skip it when time is short
+        with ThreadPoolExecutor(max_workers=len(top)) as pool:
+            futs = {pool.submit(groq_describe, f["bytes"]): f for f in top}
+            try:
+                for fut in as_completed(futs, timeout=20):     # whole stage capped, not 25 s per photo
+                    try:
+                        futs[fut].update(fut.result())
+                    except Exception:
+                        log.info("collage: vision skipped for %s", futs[fut].get("asset_id"))
+            except Exception:
+                log.warning("collage: vision stage hit its 20s cap; continuing without the rest")
+            for fut in futs:
+                fut.cancel()
     for f in cands:
         f["quality_score"] = _final_score(f)
     cands.sort(key=lambda c: c["quality_score"], reverse=True)

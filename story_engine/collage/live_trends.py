@@ -99,15 +99,21 @@ def _fetch(url, now, max_age_hours, timeout):
     return out
 
 
-def scan_verified_trends(category="general", max_age_hours=36, timeout=5):
+def scan_verified_trends(category="general", max_age_hours=36, timeout=(3, 4)):
     now = datetime.now(timezone.utc); items = []
-    for url in _feeds():
+    from concurrent.futures import ThreadPoolExecutor
+    urls = [u for u in _feeds() if urlparse(u).scheme == "https"]
+
+    def _safe(url):
         try:
-            if urlparse(url).scheme != "https":
-                continue
-            items += _fetch(url, now, max_age_hours, timeout)
+            return _fetch(url, now, max_age_hours, timeout)
         except Exception as e:
             log.info("trend feed failed %s: %s", url, e)
+            return []
+    if urls:
+        with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+            for got in pool.map(_safe, urls):
+                items += got
     verified, seen = [], set()
     for a in items:
         if not a["tokens"] or _sensitive(a["title"]):
