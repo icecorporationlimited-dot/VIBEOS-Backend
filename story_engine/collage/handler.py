@@ -30,7 +30,7 @@ def handle_collage_story(job, db):
         asset_stamp["telegram_id"] = principal.subject
     now = datetime.now(timezone.utc)
 
-    scheduled_jobs = list(db["publish_jobs"].find({**owner_filter, "format": {"$in": ["photo", "story"]},
+    scheduled_jobs = list(db["publish_jobs"].find({**owner_filter, "format": {"$in": ["photo", "story", "carousel"]},
         "status": {"$in": ["queued", "retry", "held"]}, "scheduled_at": {"$ne": None}}).sort("scheduled_at", 1).limit(60))
     discovered = {}
     for pj in scheduled_jobs:
