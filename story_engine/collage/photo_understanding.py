@@ -88,8 +88,10 @@ def groq_describe(raw):
         return {}
     im = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB"); im.thumbnail((768, 768))
     b = io.BytesIO(); im.save(b, "JPEG", quality=78)
-    prompt = ("Describe this photo as compact JSON: subject, mood, lighting, colours, location, pose, "
-              "quality_score(0-1), category (fashion/kpop/friends/festival/nature/cricket/other). "
+    prompt = ("Describe this photo as compact JSON with subject, mood, lighting, colours, location, pose, outfit, event, tags, "
+              "quality_score(0-1), story_relevance(0-1), composition_score(0-1), aesthetic_match(0-1), "
+              "category (fashion/kpop/friends/festival/nature/cricket/other), wide_shot (boolean). "
+              "Judge crop safety for a vertical 9:16 story, and whether the image plausibly belongs to a coherent event/story. "
               "Do not identify people. JSON only.")
     r = requests.post("https://api.groq.com/openai/v1/chat/completions",
                       headers={"Authorization": "Bearer " + key}, timeout=(5, 15),
