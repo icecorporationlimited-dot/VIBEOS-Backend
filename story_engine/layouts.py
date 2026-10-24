@@ -102,6 +102,9 @@ def process(db, base=TEMPLATES_DIR) -> dict:
         lay = pick(db, t, a) if t else None
         if not lay:
             stats["no_layout"] += 1
+            db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {
+                "quality_status": "rejected",
+                "quality_reasons": ["no layout fits copy (max_chars/max_lines)"]}})
             continue
         db[ASSETS].update_one({"_id": a["_id"]}, {"$set": {"layout_id": lay["layout_id"], "layout_version": lay["version"]}})
         stats["assigned"] += 1
