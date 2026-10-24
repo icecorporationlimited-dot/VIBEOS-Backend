@@ -125,7 +125,15 @@ LINES = {"funny": (2, 3), "hype": (2, 3), "wholesome": (2, 4), "reflective": (1,
 
 # Step 5: writer
 COPY_LANGUAGE = "Hinglish in Roman script (natural Indian social-media voice, light slang, not forced)"
-MAX_LINE_CHARS = 90            # hard cap per line; the layout's own max_chars is checked again in step 9
+MAX_LINE_CHARS = 90            # absolute ceiling (only generic/tribute-type layouts go this high)
+# Per-mood cap = what the ACTIVE layouts for that mood can really hold (see templates/*/manifest.json).
+# funny/hype/wholesome layouts max out at 55-65 chars; writing 70-90 leaves the asset with no layout.
+# If you add a wider layout for a mood, raise its number here.
+LINE_CHARS = {"funny": 60, "hype": 60, "wholesome": 60, "reflective": 75, "solemn": 80}
+
+
+def line_cap(mood) -> int:
+    return LINE_CHARS.get(mood, MAX_LINE_CHARS)
 DUP_SIMILARITY = 0.6           # word-overlap above this vs a recent story = duplicate
 DUP_LOOKBACK_DAYS = 7
 WRITE_ATTEMPTS = 2             # retries when fact-check/duplicate check rejects
