@@ -85,7 +85,7 @@ def publish_one(db, buffer, service, principal, now=None, max_per_day=None, bloc
     if not entry:
         return None
     try:
-        out = queue_story(db, buffer, service, principal, entry["story_asset_id"], None)
+        out = queue_story(db, buffer, service, principal, entry["story_asset_id"], None, source="auto")
     except StoryPublishError as exc:
         # Trend stays "used up" for this user (unique feed index); mark it so it is not retried forever.
         log.warning("auto story %s not queued for %s: %s", entry["story_asset_id"], user_id, exc)
