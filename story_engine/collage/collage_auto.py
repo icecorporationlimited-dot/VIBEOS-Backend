@@ -53,8 +53,11 @@ def maybe_enqueue(db, principal, now=None):
     if last:
         wait = FAIL_BACKOFF_HOURS if last.get("status") == jobs.FAILED else hours
         if last.get("status") in (jobs.QUEUED, jobs.RUNNING) or _aware(last["created"]) > now - timedelta(hours=wait):
+            log.info("collage autopilot: %s waiting (last job %s, status %s)", principal.owner_id, last.get("_id", "")[:8], last.get("status"))
             return None
-    if eligible_photo_count(db, principal) < int(os.getenv("COLLAGE_MIN_PHOTOS", "4")):
+    have, need = eligible_photo_count(db, principal), int(os.getenv("COLLAGE_MIN_PHOTOS", "4"))
+    if have < need:
+        log.info("collage autopilot: %s has %d scheduled ready photo(s), needs %d", principal.owner_id, have, need)
         return None
     return jobs.enqueue(db, "collage_story", {"principal": {"kind": principal.kind, "subject": principal.subject}})
 
