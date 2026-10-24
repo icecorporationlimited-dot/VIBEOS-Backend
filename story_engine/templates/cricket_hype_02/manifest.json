@@ -1,0 +1,30 @@
+{
+  "layout_id": "cricket_hype_02",
+  "version": 1,
+  "categories": [
+    "cricket",
+    "sports"
+  ],
+  "moods": [
+    "hype",
+    "wholesome"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 3,
+      "max_chars": 62
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false,
+  "active": true,
+  "description": "High-energy sports reaction with punchy condensed-feeling type and stadium glow."
+}
