@@ -1,0 +1,29 @@
+{
+  "layout_id": "sports_funny_01",
+  "version": 1,
+  "categories": [
+    "cricket",
+    "sports"
+  ],
+  "moods": [
+    "funny"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 3,
+      "max_chars": 62
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false,
+  "active": true,
+  "description": "Playful fan-reaction layout with sticker-like accents and casual meme energy."
+}
