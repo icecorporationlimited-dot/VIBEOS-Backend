@@ -1,0 +1,24 @@
+# Separate worker service: keep image/LLM/render RAM outside the 512MB main backend.
+# Uses Dockerfile.collage (rembg + OpenCV); the other workers keep the lighter Dockerfile.worker.
+services:
+  - type: worker
+    name: vibeos-worker-collage
+    runtime: docker
+    dockerfilePath: ./Dockerfile.collage
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JOB_TYPES
+        value: collage_story
+      - key: GROQ_API_KEY_COLLAGE
+        sync: false
+      - key: COLLAGE_VISION_MODEL
+        value: meta-llama/llama-4-scout-17b-16e-instruct
+      - key: COLLAGE_COPY_MODEL
+        value: llama-3.3-70b-versatile
+      - key: COLLAGE_CUTOUTS          # set to 0 if the worker ever runs out of RAM
+        value: "1"
+      - key: COLLAGE_REMBG_MODEL
+        value: u2netp

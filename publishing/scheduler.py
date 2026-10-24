@@ -120,6 +120,7 @@ class Worker:
             self._guard(self._autofill)
         if self.story_db is not None and self._due("trends"):
             self._guard(self._auto_story_library)
+            self._guard(self._auto_collage)
         if self.engagement_ai is not None and self._engagement_due():
             self._guard(self._engagement)
         if self._due("tokens"):
@@ -245,6 +246,21 @@ class Worker:
                 self._tell(principal, f"📰 Story queued automatically: \u201c{done['title']}\u201d. "
                                       "It goes out when your autopilot rules allow, or is dropped if the trend "
                                       "expires. /queue to see it, /cancel to stop it.")
+
+    def _auto_collage(self):
+        """Autopilot collage Stories: enqueue `collage_story` media jobs and queue finished collages."""
+        from story_engine.collage import collage_auto
+        if not collage_auto.enabled():
+            return
+        for principal in self._principals():
+            s = self.autopilot.get(principal)
+            acct = self.accounts.get_for(principal)
+            if not (not s["paused"] and "story" in s["formats"] and acct and acct.get("status") == "active"):
+                continue
+            done = collage_auto.tick(self.story_db, self.service, principal, now=self.clock())
+            if done["queued"]:
+                self._tell(principal, "\U0001F5BC\uFE0F Photo collage Story queued automatically. It goes out when your "
+                                      "autopilot rules allow. /queue to see it, /cancel to stop it.")
 
     # ---- AI comment engagement -------------------------------------------
     def _engagement_due(self):

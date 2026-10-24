@@ -235,10 +235,17 @@ def handle_story_card(job, db):
     return {"blob_id": blob_id}
 
 
+def handle_collage_story(job, db):
+    """Story-only photo collage; implementation lives in story_engine/collage/handler.py."""
+    from story_engine.collage.handler import handle_collage_story as _run
+    return _run(job, db)
+
+
 HANDLERS = {
     "edit": handle_edit,
     "prepare_ready": handle_prepare_ready,
     "reel": handle_reel,
     "smart_story": handle_smart_story,
     "story_card": handle_story_card,
+    "collage_story": handle_collage_story,
 }
