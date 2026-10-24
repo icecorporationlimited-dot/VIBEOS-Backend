@@ -93,8 +93,9 @@ def fact_check(lines, trend, mood) -> list:
     lo, hi = cfg.LINES.get(mood, (1, 3))
     if len(lines) > hi + 1:
         bad.append(f"too many lines ({len(lines)} > {hi + 1})")
-    if any(len(l) > cfg.MAX_LINE_CHARS for l in lines):
-        bad.append(f"line over {cfg.MAX_LINE_CHARS} chars")
+    cap = cfg.line_cap(mood)
+    if any(len(l) > cap for l in lines):
+        bad.append(f"line over {cap} chars (shorten every line to under {cap})")
     if _QUOTE.search(text):
         bad.append("quotation marks (possible invented quote)")
     if "#" in text or "http" in text.lower():
@@ -207,7 +208,7 @@ def _prompt(trend, mood, angle, recent, feedback):
         f"What happened: {ctx.get('what') or trend.get('title')}\n"
         f"Mood: {mood} ({MOOD_HELP.get(mood, '')})\nAngle: {angle} ({ANGLE_HELP.get(angle, '')})\n"
         f"Language: {cfg.COPY_LANGUAGE}. Slang only as seasoning; every line must contain a fact from the headline.\n"
-        f"Write {lo}-{hi} short lines (each under {cfg.MAX_LINE_CHARS} characters)"
+        f"Write {lo}-{hi} short lines (each under {cfg.line_cap(mood)} characters, count carefully)"
         + (" - do not pad; fewer is fine." if mood == "solemn" else ".") + "\n"
         + (f"Do not start like these recent stories: {json.dumps(openers, ensure_ascii=False)}\n" if openers else "")
         + (f"Your last attempt was rejected because: {'; '.join(feedback)}. Fix that.\n" if feedback else "")
