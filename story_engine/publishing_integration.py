@@ -32,8 +32,10 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _enqueue(publish_service, principal, asset_id, scheduled_at):
-    source = "scheduled" if scheduled_at else "manual"
+def _enqueue(publish_service, principal, asset_id, scheduled_at, source=None):
+    # source "manual" = user tapped Post -> PolicyEngine skips quiet hours / daily limit / min gap.
+    # Autopilot stories pass source="auto" so those rules DO apply.
+    source = source or ("scheduled" if scheduled_at else "manual")
     if principal.kind == "telegram":                       # legacy entry point, same as trends/auto_story.py
         return publish_service.enqueue(principal.subject, [asset_id], "story",
                                        scheduled_at=scheduled_at, source=source)
@@ -42,7 +44,7 @@ def _enqueue(publish_service, principal, asset_id, scheduled_at):
 
 
 def queue_story(db, content_buffer, publish_service, principal: Principal,
-                story_asset_id: str, scheduled_at=None) -> dict:
+                story_asset_id: str, scheduled_at=None, source=None) -> dict:
     """Queue one feed-owned story for Instagram Story publishing.
 
     `principal` must come from an already-authenticated adapter (web session / Telegram).
@@ -101,7 +103,7 @@ def queue_story(db, content_buffer, publish_service, principal: Principal,
     buffered = res["asset"]                                 # add_trend_story returns a dict, not a tuple
 
     try:
-        job = _enqueue(publish_service, principal, buffered["_id"], when)
+        job = _enqueue(publish_service, principal, buffered["_id"], when, source)
     except PublishError as exc:                             # NotConnected is a PublishError subclass
         if not res["duplicate"]:
             try:
