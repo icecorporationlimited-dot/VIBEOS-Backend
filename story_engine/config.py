@@ -226,6 +226,20 @@ GNEWS_KEY = _os.getenv("GNEWS_API_KEY", "")
 GNEWS_QUERIES = {"cricket": "india cricket", "sports": "india sports", "movies": "bollywood",
                  "gaming": "video game release", "viral": "viral india", "news": "india"}
 GNEWS_MIN_INTERVAL_MIN = 180   # 6 queries / 3h = 48 requests a day
+GNEWS_REQUEST_GAP = 1.3        # seconds between GNews calls: the free plan allows ~1 request/second (else HTTP 429)
+GNEWS_RETRY_429_WAIT = 3.0     # one retry after a 429
+GNEWS_RETRY_AFTER_FAIL_MIN = 30   # if EVERY query failed, try again after this many minutes (not the full interval)
+
+# Step 2b: confirm. A trend on "hold" with too few publishers is looked up once on Google/Bing News RSS (no key,
+# no quota) and any other publisher whose own headline clearly matches is added as a source. verify.py still
+# decides: publisher count, trusted count, disputes, numbers, freshness are all re-checked afterwards.
+CONFIRM_ENABLED = True
+CONFIRM_MAX_LOOKUPS = 40       # per pipeline pass (~1s each); 400+ held events are covered over a few passes
+CONFIRM_RECHECK_MIN = 90       # do not look the same trend up again sooner than this
+CONFIRM_MATCH = 0.40           # headline keyword overlap (Jaccard) needed to count as the same event
+CONFIRM_MIN_SHARED = 3         # ... and at least this many shared keywords (names, teams, numbers)
+CONFIRM_DELAY = 1.0            # seconds between lookups
+CONFIRM_MAX_FAILS = 5          # consecutive failed lookups -> stop this pass (feed blocked)
 
 # Categories that are only a fallback: a specific category wins when the same event is seen as both.
 GENERIC_CATEGORIES = {"news", "viral", "event"}

@@ -11,7 +11,7 @@ from pymongo.errors import DuplicateKeyError
 
 from memory import db
 from story_engine import db as se, rank, context, writer, visuals, layouts, quality, render, mongo_store, vision
-from story_engine.discovery import run
+from story_engine.discovery import run, confirm
 
 log = logging.getLogger("story_engine.loop")
 LOCKS = "se_locks"
@@ -66,6 +66,7 @@ def run_once(llm):
     """Ek poora pass. Har step apne aap me guard hai: ek fail ho to baaki chalte hain."""
     steps = [
         ("discovery", lambda: run.save(db, run.discover_all())),
+        ("confirm",   lambda: confirm.process(db)),   # find extra publishers for held single-source events
         ("rank",      lambda: rank.process(db)),
         ("context",   lambda: context.process(db, llm)),
         ("writer",    lambda: writer.process(db, llm)),

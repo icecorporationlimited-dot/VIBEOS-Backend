@@ -5,6 +5,7 @@ runs at most once per GNEWS_MIN_INTERVAL_MIN minutes (in-process; a restart simp
 The key is never logged: failures log only the exception type.
 """
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from .. import config as cfg
@@ -45,20 +46,38 @@ def fetch_category(category, query, key, http=None, now=None):
     return groups_to_candidates(category, group_articles(parse_articles(r.json())), "gnews")
 
 
-def discover(http=None, now=None, report=None):
+def _status(exc):
+    return getattr(getattr(exc, "response", None), "status_code", "?")
+
+
+def discover(http=None, now=None, report=None, sleep=None):
     global _last_run
     now = now or utcnow()
+    sleep = sleep or time.sleep
     if not cfg.GNEWS_KEY:
         return []
     if _last_run and now - _last_run < timedelta(minutes=cfg.GNEWS_MIN_INTERVAL_MIN):
         return []
     _last_run = now
-    out = []
-    for cat, q in cfg.GNEWS_QUERIES.items():
-        try:
-            out += fetch_category(cat, q, cfg.GNEWS_KEY, http, now)
-        except Exception as exc:                       # never log the URL: it carries the API key
-            log.warning("gnews %s failed: %s", cat, type(exc).__name__)
-            if report is not None:
-                report.append({"source": f"gnews/{cat}", "candidates": 0, "error": type(exc).__name__})
+    out, ok = [], 0
+    for i, (cat, q) in enumerate(cfg.GNEWS_QUERIES.items()):
+        if i:
+            sleep(cfg.GNEWS_REQUEST_GAP)          # free plan: ~1 request/second, faster calls get HTTP 429
+        for attempt in (1, 2):
+            try:
+                out += fetch_category(cat, q, cfg.GNEWS_KEY, http, now)
+                ok += 1
+                break
+            except Exception as exc:               # never log the URL: it carries the API key
+                code = _status(exc)
+                if code == 429 and attempt == 1:
+                    sleep(cfg.GNEWS_RETRY_429_WAIT)
+                    continue
+                log.warning("gnews %s failed: %s status=%s", cat, type(exc).__name__, code)
+                if report is not None:
+                    report.append({"source": f"gnews/{cat}", "candidates": 0,
+                                   "error": f"{type(exc).__name__} {code}"})
+                break
+    if ok == 0:                                    # everything failed: retry soon instead of waiting the full interval
+        _last_run = now - timedelta(minutes=max(0, cfg.GNEWS_MIN_INTERVAL_MIN - cfg.GNEWS_RETRY_AFTER_FAIL_MIN))
     return out
