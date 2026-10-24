@@ -1,0 +1,30 @@
+{
+  "layout_id": "festival_glow_02",
+  "version": 1,
+  "categories": [
+    "festival"
+  ],
+  "moods": [
+    "wholesome",
+    "hype",
+    "reflective"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 3,
+      "max_chars": 60
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false,
+  "active": true,
+  "description": "Soft glowing festival mood with quiet luxury typography and airy composition."
+}
