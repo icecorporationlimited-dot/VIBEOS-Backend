@@ -1,0 +1,31 @@
+{
+  "layout_id": "tribute_01",
+  "version": 2,
+  "active": true,
+  "description": "Respectful tribute / serious moment",
+  "categories": [
+    "tragedy",
+    "news",
+    "event"
+  ],
+  "moods": [
+    "solemn",
+    "reflective"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 5,
+      "max_chars": 82
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false
+}

@@ -26,5 +26,6 @@
       "height": 1920
     }
   },
-  "special": false
+  "special": false,
+  "active": false
 }

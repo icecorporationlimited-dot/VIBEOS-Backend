@@ -1,0 +1,32 @@
+{
+  "layout_id": "sports_fan_01",
+  "version": 2,
+  "active": true,
+  "description": "Sports and gaming fan story",
+  "categories": [
+    "cricket",
+    "sports",
+    "gaming"
+  ],
+  "moods": [
+    "hype",
+    "funny",
+    "wholesome"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 3,
+      "max_chars": 62
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false
+}

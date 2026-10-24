@@ -1,0 +1,34 @@
+{
+  "layout_id": "moody_late_01",
+  "version": 2,
+  "active": true,
+  "description": "Moody reflective story",
+  "categories": [
+    "viral",
+    "news",
+    "event",
+    "movies",
+    "gaming"
+  ],
+  "moods": [
+    "reflective",
+    "wholesome",
+    "solemn"
+  ],
+  "text_slots": {
+    "lines": {
+      "max_lines": 4,
+      "max_chars": 75
+    },
+    "credit": {
+      "max_chars": 90
+    }
+  },
+  "image_slots": {
+    "background": {
+      "width": 1080,
+      "height": 1920
+    }
+  },
+  "special": false
+}
