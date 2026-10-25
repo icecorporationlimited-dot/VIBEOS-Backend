@@ -1,4 +1,6 @@
-# Collage worker only (Dockerfile.collage). rembg also installs opencv-python-headless,
-# which story_engine/collage/photo_understanding.py uses for face detection.
+# Collage worker only (Dockerfile.collage).
+# opencv-python-headless >= 4.8 provides cv2.FaceDetectorYN (YuNet face detector) used by
+# story_engine/collage/photo_understanding.py. rembg would pull it in anyway; pinning keeps the minimum explicit.
 -r requirements-worker.txt
 rembg[cpu]>=2.0.60,<3
+opencv-python-headless>=4.8

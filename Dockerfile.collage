@@ -1,4 +1,4 @@
-# Collage worker: Dockerfile.worker + rembg (subject cut-outs) + OpenCV (face-aware crops, pulled in by rembg).
+# Collage worker: Dockerfile.worker + rembg (subject cut-outs) + OpenCV (YuNet face detector for subject-aware crops).
 # Python 3.12: onnxruntime/rembg wheels are the safest there. The u2netp model is baked in at build time so the
 # first job does not download ~5 MB at runtime, and it runs as the non-root user.
 FROM python:3.12-slim
@@ -7,10 +7,11 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     MALLOC_ARENA_MAX=2 \
     U2NET_HOME=/app/.u2net \
+    COLLAGE_YUNET_MODEL=/app/models/face_detection_yunet_2023mar.onnx \
     OMP_NUM_THREADS=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libraqm0 libgomp1 fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends libraqm0 libgomp1 fonts-dejavu-core curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,7 +19,20 @@ COPY requirements-worker.txt requirements-collage.txt ./
 RUN pip install --no-cache-dir -r requirements-collage.txt \
     && python -c "from rembg import new_session; new_session('u2netp')"
 
+# YuNet face detector (230 KB ONNX, used via cv2.FaceDetectorYN). Build fails loudly if the download is not the real model.
+RUN mkdir -p /app/models \
+    && (curl -fsSL -o /app/models/face_detection_yunet_2023mar.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
+        || curl -fsSL -o /app/models/face_detection_yunet_2023mar.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx) \
+    && test "$(stat -c %s /app/models/face_detection_yunet_2023mar.onnx)" -gt 100000 \
+    && python -c "import cv2; cv2.FaceDetectorYN.create('/app/models/face_detection_yunet_2023mar.onnx', '', (320, 320))"
+
 COPY . .
+
+# Collage typography: free Google Fonts (Caveat, Reenie Beanie, Gaegu, Special Elite, Playfair Display, Bodoni Moda, Anton,
+# Bebas Neue, Permanent Marker) -> assets/collage/fonts/. Best effort: a missing font falls back to Poppins / Lora.
+# Set COLLAGE_FONTS_STRICT=1 as a build arg to fail the build instead. The asset pack (tapes, paper, doodles, torn scraps)
+# is already in assets/collage/ (committed; regenerate with tools/make_collage_assets.py).
+RUN python tools/fetch_collage_fonts.py
 
 RUN useradd --create-home --uid 10001 vibeos && chown -R vibeos:vibeos /app
 USER vibeos

@@ -6,7 +6,7 @@ Stage 1: measure every candidate cheaply (no network). Stage 2: ask the vision m
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from . import budget
-from .photo_understanding import inspect_photo, groq_describe
+from .photo_understanding import inspect_photo, groq_describe, groq_caption, locate_subject
 
 log = logging.getLogger(__name__)
 VISION_TOP = 5          # at most this many Groq vision calls per collage
@@ -21,6 +21,26 @@ def _final_score(f):
 
 def _dist(a, b):
     return bin(a ^ b).count("1")
+
+
+def _fill_captions(chosen):
+    """Every picked photo should have its own vision caption; the full describe only ran for the top few,
+    so the rest get a small caption-only call (still optional: time-boxed, failures fall back later)."""
+    need = [f for f in chosen if not f.get("caption") and f.get("bytes")]
+    if not need or not budget.have(30):
+        return
+    with ThreadPoolExecutor(max_workers=len(need)) as pool:
+        futs = {pool.submit(groq_caption, f["bytes"]): f for f in need}
+        try:
+            for fut in as_completed(futs, timeout=12):
+                try:
+                    futs[fut]["caption"] = fut.result()
+                except Exception:
+                    log.info("collage: caption skipped for %s", futs[fut].get("asset_id"))
+        except Exception:
+            log.warning("collage: caption stage hit its 12s cap; continuing")
+        for fut in futs:
+            fut.cancel()
 
 
 def select_photos(items, max_photos=5):
@@ -67,6 +87,13 @@ def select_photos(items, max_photos=5):
                 chosen.append(f)
             if len(chosen) >= min(3, len(cands)):
                 break
+    _fill_captions(chosen)
+    for f in chosen:                                  # subject_box / face_box only for the picked photos (rembg is slow)
+        try:
+            f["subject_region"] = locate_subject(f["bytes"])
+        except Exception:
+            log.warning("collage: subject detection failed for %s", f.get("asset_id"), exc_info=True)
+            f["subject_region"] = None                       # crop falls back to a soft default
     for f in cands:                                   # free the raw bytes of the ones we dropped
         if f not in chosen:
             f["bytes"] = None

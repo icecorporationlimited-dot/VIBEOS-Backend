@@ -70,8 +70,9 @@ def handle_collage_story(job, db):
     with budget.stage("copy"):
         copy = write_copy(category, theme, trend)
     with budget.stage("render"):
-        png = render(photos, theme, copy, load_layout(theme, len(photos)))
-    check = validate(png, copy, len(photos))
+        report = {}
+        png = render(photos, theme, copy, load_layout(theme, len(photos)), report)
+    check = validate(png, copy, len(photos), report.get("plan"))
     if not check["valid"]:
         raise ValueError("Collage validation failed: " + ",".join(check["errors"]))
 
