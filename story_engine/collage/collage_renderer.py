@@ -68,54 +68,14 @@ def _sticker(cut, max_w, max_h):
 
 
 def _fit_focus(photo, size, focus):
-    """
-    Fit a photo into a collage tile without cutting off people unnecessarily.
-
-    For similar aspect ratios, use a focus-aware crop. For very different ratios
-    (e.g. a portrait in a wide tile), use a blurred, darkened fill behind a
-    complete contain-fit foreground so heads, outfits and other story details
-    remain visible instead of being aggressively cropped.
-    """
-    w, h = map(int, size)
-    if w <= 0 or h <= 0:
-        raise ValueError("target size must be positive")
-    photo = ImageOps.exif_transpose(photo).convert("RGB")
-    iw, ih = photo.size
+    """Crop `photo` to size's aspect ratio, keeping the focus point (fx, fy in 0..1) inside the crop."""
+    w, h = size; iw, ih = photo.size
     fx, fy = (focus or (0.5, 0.4))[:2]
-    try:
-        fx, fy = float(fx), float(fy)
-    except (TypeError, ValueError):
-        fx, fy = 0.5, 0.4
-    fx, fy = min(1.0, max(0.0, fx)), min(1.0, max(0.0, fy))
-
-    source_ratio, target_ratio = iw / ih, w / h
-    ratio_delta = abs(source_ratio / target_ratio - 1.0)
-
-    # Cropping is acceptable when it removes only a small amount of the frame.
-    if ratio_delta <= 0.22:
-        scale = max(w / iw, h / ih)
-        cw, ch = w / scale, h / scale
-        left = min(max(fx * iw - cw / 2, 0), iw - cw)
-        top = min(max(fy * ih - ch * 0.42, 0), ih - ch)
-        return photo.crop((int(left), int(top), int(left + cw), int(top + ch))).resize(
-            (w, h), Image.Resampling.LANCZOS
-        )
-
-    # Large aspect-ratio mismatch: blurred background + full photo foreground.
-    # This preserves the entire source image while keeping the tile visually filled.
-    bg_scale = max(w / iw, h / ih)
-    bg = photo.resize((max(w, int(iw * bg_scale)), max(h, int(ih * bg_scale))),
-                      Image.Resampling.LANCZOS)
-    bx = max(0, (bg.width - w) // 2)
-    by = max(0, (bg.height - h) // 2)
-    bg = bg.crop((bx, by, bx + w, by + h)).filter(ImageFilter.GaussianBlur(max(12, min(w, h) // 24)))
-    bg = ImageEnhance.Brightness(bg).enhance(0.68) if False else bg
-    fg_scale = min(w / iw, h / ih)
-    fw, fh = max(1, int(iw * fg_scale)), max(1, int(ih * fg_scale))
-    fg = photo.resize((fw, fh), Image.Resampling.LANCZOS)
-    x, y = (w - fw) // 2, (h - fh) // 2
-    bg.paste(fg, (x, y))
-    return bg
+    scale = max(w / iw, h / ih)
+    cw, ch = w / scale, h / scale                                    # crop window in source pixels
+    left = min(max(fx * iw - cw / 2, 0), iw - cw)
+    top = min(max(fy * ih - ch * 0.42, 0), ih - ch)                  # face sits a bit above the middle
+    return photo.crop((int(left), int(top), int(left + cw), int(top + ch))).resize((w, h), Image.Resampling.LANCZOS)
 
 
 def _torn_card(photo, size, rng, focus=None, torn=True):

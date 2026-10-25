@@ -89,10 +89,18 @@ CREDIBILITY = {
 DEFAULT_CREDIBILITY = 50
 
 # Audience relevance (India-first) and visual/story potential per category, 0-100
-RELEVANCE = {"cricket": 100, "festival": 90, "movies": 80, "sports": 75, "gaming": 70,
-             "viral": 70, "news": 60, "event": 60, "tragedy": 50}
-VISUAL = {"festival": 90, "cricket": 85, "movies": 85, "gaming": 80, "sports": 75,
-          "viral": 60, "event": 60, "news": 40, "tragedy": 30}
+# Balanced on purpose: cricket used to be 100 and beat everything else on score, so the feed looked like a cricket
+# news account. Now every audience-facing category competes on roughly equal footing.
+RELEVANCE = {"festival": 90, "movies": 85, "viral": 85, "cricket": 80, "gaming": 78, "sports": 75,
+             "news": 65, "event": 65, "tragedy": 50}
+VISUAL = {"festival": 90, "movies": 88, "viral": 80, "cricket": 80, "gaming": 80, "sports": 75,
+          "event": 60, "news": 45, "tragedy": 30}
+
+# Feed variety: when picking trends to write/serve, no single category may take more than this share of the slots
+# (round-robin by score across categories). Set to 1.0 to switch the cap off.
+MAX_CATEGORY_SHARE = 0.34
+# ...and cricket specifically is capped lower than the rest, since it is the one category that floods the news cycle.
+CATEGORY_SHARE_OVERRIDE = {"cricket": 0.25}
 INDIA_WORDS = {"india", "indian", "bharat", "ipl", "bcci", "bollywood", "delhi", "mumbai"}
 INDIA_BONUS = 10
 
@@ -193,14 +201,6 @@ DISCOVERY_FEEDS = [
      "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"},
     {"name": "The Hindu", "category": "cricket", "official": False,
      "url": "https://www.thehindu.com/sport/cricket/feeder/default.rss"},
-    {"name": "Hindustan Times", "category": "cricket", "official": False,
-     "url": "https://www.hindustantimes.com/feeds/rss/cricket/rssfeed.xml"},
-    {"name": "Indian Express", "category": "cricket", "official": False,
-     "url": "https://indianexpress.com/section/sports/cricket/feed/"},
-    {"name": "Times of India", "category": "cricket", "official": False,
-     "url": "https://timesofindia.indiatimes.com/rssfeeds/4719161.cms"},
-    {"name": "NDTV", "category": "cricket", "official": False,
-     "url": "https://feeds.feedburner.com/ndtvsports-cricket"},
     {"name": "The Hindu", "category": "sports", "official": False,
      "url": "https://www.thehindu.com/sport/feeder/default.rss"},
     {"name": "Hindustan Times", "category": "sports", "official": False,
@@ -214,6 +214,15 @@ DISCOVERY_FEEDS = [
      "url": "https://www.hindustantimes.com/feeds/rss/entertainment/bollywood/rssfeed.xml"},
     {"name": "Indian Express", "category": "movies", "official": False,
      "url": "https://indianexpress.com/section/entertainment/bollywood/feed/"},
+    {"name": "Pinkvilla", "category": "movies", "official": False, "url": "https://www.pinkvilla.com/rss.xml"},
+    {"name": "Hindustan Times", "category": "viral", "official": False,
+     "url": "https://www.hindustantimes.com/feeds/rss/trending/rssfeed.xml"},
+    {"name": "Indian Express", "category": "viral", "official": False,
+     "url": "https://indianexpress.com/section/trending/feed/"},
+    {"name": "Times of India", "category": "viral", "official": False,
+     "url": "https://timesofindia.indiatimes.com/rssfeeds/2647163.cms"},
+    {"name": "NDTV", "category": "movies", "official": False,
+     "url": "https://feeds.feedburner.com/ndtvmovies-latest"},
     {"name": "IGN", "category": "gaming", "official": False, "url": "https://feeds.feedburner.com/ign/all"},
     {"name": "Polygon", "category": "gaming", "official": False, "url": "https://www.polygon.com/rss/index.xml"},
     {"name": "PlayStation Blog", "category": "gaming", "official": True, "url": "https://blog.playstation.com/feed/"},
@@ -232,7 +241,8 @@ SEARCH_MATCH = 0.35            # a news item must resemble the chosen headline t
 # GNews official API (optional, needs GNEWS_API_KEY). Free plan ~100 requests/day, shared with trends/ enrich.
 GNEWS_KEY = _os.getenv("GNEWS_API_KEY", "")
 GNEWS_QUERIES = {"cricket": "india cricket", "sports": "india sports", "movies": "bollywood",
-                 "gaming": "video game release", "viral": "viral india", "news": "india"}
+                 "gaming": "video game release", "viral": "viral india trending", "news": "india",
+                 "festival": "india festival celebration"}
 GNEWS_MIN_INTERVAL_MIN = 180   # 6 queries / 3h = 48 requests a day
 GNEWS_REQUEST_GAP = 1.3        # seconds between GNews calls: the free plan allows ~1 request/second (else HTTP 429)
 GNEWS_RETRY_429_WAIT = 3.0     # one retry after a 429

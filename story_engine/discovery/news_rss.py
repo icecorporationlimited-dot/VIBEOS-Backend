@@ -17,10 +17,12 @@ log = logging.getLogger(__name__)
 # category -> search query. Edit freely; add your own niches here.
 QUERIES = {
     "cricket": "india cricket match",
-    "sports": "sports india",
+    "sports": "football OR tennis OR hockey OR f1 india",
     "movies": "bollywood movie release",
+    "movies_ott": "web series OR netflix OR ott release india",
     "gaming": "gaming release",
     "viral": "viral india",
+    "viral_memes": "meme OR trending OR internet reacts india",
     "news": "india top news",
 }
 URL = "https://news.google.com/rss/search?q={q}+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
@@ -125,5 +127,5 @@ def fetch_category(category: str, query: str, http=None, limit: int = 30):
 def discover(http=None, queries=None):
     out = []
     for cat, q in (queries or QUERIES).items():
-        out += fetch_category(cat, q, http=http)
+        out += fetch_category(cat.split("_")[0], q, http=http)     # "movies_ott" -> category "movies"
     return out

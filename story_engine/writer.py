@@ -320,8 +320,10 @@ def process(db, llm, limit=MAX_TRENDS_PER_RUN) -> dict:
     _ensure_rejection_index(db)
     llm = _CountingLLM(llm, MAX_LLM_CALLS_PER_RUN)
     recent = recent_copies(db)
-    rows = (db[TRENDS].find({"verification_status": "verified", "angles": {"$exists": True}})
-            .sort("trend_score", -1).limit(limit))
+    from .rank import diversify          # mix categories: do not spend every LLM call on cricket
+    pool = list(db[TRENDS].find({"verification_status": "verified", "angles": {"$exists": True}})
+                .sort("trend_score", -1).limit(limit * 6))
+    rows = diversify(pool, limit)
     for t in rows:
         for a in t["angles"]:
             if db[ASSETS].find_one({"trend_id": t["trend_id"], "mood": a["mood"], "angle": a["angle"]}):

@@ -55,16 +55,8 @@ def handle_collage_story(job, db):
             raw = buf.get_media(aid)
         except Exception:
             continue
-        creative = asset.get("creative") or {}; meta = asset.get("metadata") or {}; collage_meta = asset.get("collage_meta") or {}
         rows.append({"asset_id": aid, "blob_id": asset.get("blob_id"), "status": "ready", "scheduled_at": sched,
-                     "bytes": raw, "filename": asset.get("filename"), "source": asset.get("source"),
-                     "caption": creative.get("caption") or asset.get("caption") or "",
-                     "tags": creative.get("tags") or meta.get("tags") or asset.get("tags") or [],
-                     "description": meta.get("description") or asset.get("description") or "",
-                     "category": creative.get("category") or meta.get("category") or asset.get("category") or "",
-                     "location": meta.get("location") or asset.get("location") or "",
-                     "outfit": meta.get("outfit") or asset.get("outfit") or "",
-                     "event": meta.get("event") or asset.get("event") or ""})
+                     "bytes": raw, "filename": asset.get("filename"), "source": asset.get("source")})
 
     budget.log.info("collage: loaded %d candidate photos in %.1fs", len(rows), budget.elapsed())
     with budget.stage("select"):
@@ -94,10 +86,7 @@ def handle_collage_story(job, db):
            "status": "ready", "blob_id": png_blob, "size_bytes": len(png), "sha256": None,
            "creative": {"caption": copy.get("text", ""), "hashtags": copy.get("hashtags", []), "vibe": theme,
                         "variants": {"story": jpg_blob}},
-           "collage_meta": {"theme": theme, "source_asset_ids": source_ids, "trend_context": trend, "validation": check,
-                            "photo_selection": [{"asset_id": x.get("asset_id"), "role": x.get("selection_role"),
-                                                 "score": x.get("selection_score"),
-                                                 "reasons": x.get("selection_reasons", [])} for x in photos]},
+           "collage_meta": {"theme": theme, "source_asset_ids": source_ids, "trend_context": trend, "validation": check},
            "created_at": now, "updated_at": now}
     db["assets"].insert_one(doc)
     return {"asset_id": asset_id, "png_blob_id": png_blob, "theme": theme, "source_asset_ids": source_ids,

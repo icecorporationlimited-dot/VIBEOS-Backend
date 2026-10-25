@@ -80,7 +80,9 @@ def pick_for_user(db, user_id, vibes=None, now=None, max_trends=30):
     vibes = clean_vibes(vibes) or learn_vibes(db, user_id)
     have = {f["trend_id"] for f in db[FEED].find({"user_id": user_id})}
     trends = db[TRENDS].find({"verification_status": "verified", "expires_at": {"$gt": now}})
-    trends = sorted(trends, key=lambda t: t.get("trend_score", 0), reverse=True)[:max_trends]
+    from .rank import diversify
+    trends = sorted(trends, key=lambda t: t.get("trend_score", 0), reverse=True)
+    trends = diversify(trends[:max_trends * 4], max_trends)
     for t in trends:
         if t["trend_id"] in have:
             continue
