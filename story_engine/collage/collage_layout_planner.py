@@ -176,8 +176,11 @@ def _gap_between(a, b):
     return math.hypot(dx, dy) if dx and dy else max(dx, dy)
 
 
-def check_plan(plan, min_gap=MIN_GAP, ratio_tol=0.012):
-    """Hard rules -> list of error strings (empty = ok). Used by the validator and the tests."""
+def check_plan(plan, min_gap=None, ratio_tol=0.012):
+    """Hard rules -> list of error strings (empty = ok). Used by the validator and the tests.
+    min_gap=None -> plan["min_gap"] if the style set one (playful_hype tiles touch: 0), else MIN_GAP (24)."""
+    if min_gap is None:
+        min_gap = plan.get("min_gap", MIN_GAP)
     errs, slots = [], plan["slots"]
     for k, s in enumerate(slots):
         if s["y"] < SAFE_Y0 or s["y"] + s["h"] > SAFE_Y1:

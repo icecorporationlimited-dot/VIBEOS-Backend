@@ -31,7 +31,7 @@ _FILES = {"bold": "Poppins-Bold.ttf", "medium": "Poppins-Medium.ttf", "light": "
           "serif": "Lora-Italic-Variable.ttf"}
 THEMES = ("playful_hype", "kpop_editorial", "photo_dump", "streetwear_baddie", "classy_editorial", "scrapbook_chaos")
 GRAIN = {"playful_hype": 0.04, "kpop_editorial": 0.045, "photo_dump": 0.08, "streetwear_baddie": 0.08,
-         "classy_editorial": 0.045, "scrapbook_chaos": 0.06}                      # gaussian grain opacity per style
+         "classy_editorial": 0.02, "scrapbook_chaos": 0.06}                      # gaussian grain opacity per style
 
 
 # ------------------------------------------------------------------ helpers
@@ -206,23 +206,121 @@ def _tape(canvas, cx, cy, w, h, angle, rng, kind="masking", tint=(236, 226, 186)
 
 
 # ------------------------------------------------------------------ 1. playful / hype
+# Tiles touch (gap 0) on a dark background. Each tile's subject is cut out, scaled up a little and pasted OVER the
+# neighbouring tiles with a ragged torn-paper white outline (fx.torn_die_cut). No cutout -> the whole tile gets the
+# same torn white rim (never a plain white box). Hand-drawn stickers: some under the cutouts, some over them.
+PH_MARGIN = 36                       # dark side margin; tiles touch each other, not the edge
+PH_OUTLINE = (14, 18)                # torn white outline width (px), per cutout
+PH_DOODLES = (("asterisk", (255, 214, 60)),      # yellow burst rays
+              ("heart", (120, 235, 160)),        # green heart
+              ("sun", (255, 238, 150)),          # spiral sun
+              ("exclaim", (255, 140, 110)))      # orange "!" scribble
+
+
+def _pop_limits(plan):
+    """Where a pop-out cutout (outline included) may reach: whole width, safe zone top, a little into the caption band."""
+    return (8, SAFE_Y0 + 4, W - 8, plan["caption_top"] + 40)
+
+
+def _pop_out(s, bbox, k0, limits, ring, max_shift=40):
+    """Scale factor k (<= k0) and shift (dx, dy) so the subject bbox (tile coords), scaled by k about its own centre,
+    stays inside `limits` with room for the outline. The shift is capped, k shrinks until it fits."""
+    L, T, R, B = limits
+    gcx, gcy = s["x"] + (bbox[0] + bbox[2]) / 2, s["y"] + (bbox[1] + bbox[3]) / 2
+    hw, hh = (bbox[2] - bbox[0]) / 2, (bbox[3] - bbox[1]) / 2
+    k = k0
+    while k > 1.0:
+        ex, ey = hw * k + ring, hh * k + ring
+        dx_lo, dx_hi = L + ex - gcx, R - ex - gcx
+        dy_lo, dy_hi = T + ey - gcy, B - ey - gcy
+        if dx_lo <= dx_hi and dy_lo <= dy_hi:
+            dx, dy = min(max(0.0, dx_lo), dx_hi), min(max(0.0, dy_lo), dy_hi)
+            if abs(dx) <= max_shift and abs(dy) <= max_shift:
+                return k, dx, dy
+        k -= 0.02
+    return 1.0, 0.0, 0.0
+
+
+def _seam_points(plan, limits):
+    """Slot corners / edge midpoints = the seams where tiles meet (deduped to a 24 px grid)."""
+    L, T, R, B = limits
+    pts = {}
+    for s in plan["slots"]:
+        x0, y0, x1, y1 = s["x"], s["y"], s["x"] + s["w"], s["y"] + s["h"]
+        for px, py in ((x0, y0), (x1, y0), (x0, y1), (x1, y1), ((x0 + x1) // 2, y0), ((x0 + x1) // 2, y1), (x0, (y0 + y1) // 2), (x1, (y0 + y1) // 2)):
+            if 60 <= px <= W - 60 and T + 30 <= py <= plan["caption_top"] - 10:
+                pts[(px // 24, py // 24)] = (int(px), int(py))
+    return list(pts.values())
+
+
 def playful_hype(photos, copy, rng, ctx):
     canvas = Image.new("RGBA", (W, H), (30, 30, 30, 255))
-    photos, slots, plan = _plan(ctx, photos, caption=210)
-    yellow, green, orange = (255, 214, 60), (120, 235, 160), (255, 140, 110)
+    photos, slots, plan = _plan(ctx, photos, caption=210, gap=0, margin_x=PH_MARGIN)
+    plan["min_gap"] = 0                                            # tiles touch on purpose (validator reads this)
+    limits = _pop_limits(plan)
+    overlays = []                                                   # (z, sprite, x, y, subject bbox in canvas coords or None)
     for p, s in zip(photos, slots):
-        tile, info = _tile(p, s, theme="playful_hype")
-        mask = cut_mask(tile) if info["mode"] == "crop" else None      # no die-cut on a contained (blurred-bg) tile
-        if mask is not None:
-            canvas.alpha_composite(die_cut(tile, mask), (s["x"], s["y"]))
-        else:                                                           # fallback: torn white paper card inside the slot
-            tile2, _i = _tile(p, s, inset=18, theme="playful_hype")
-            cd, x, y = _in_slot(fx.torn_card(tile2, rng, border=18, amp=7, angle=rng.uniform(-2, 2)), s)
-            fx.place(canvas, cd, x, y, mode="normal", contact=(3.5, (2, 4), .55), ambient=(20, (8, 16), .5))
-    kinds = (("sparkle", yellow), ("heart", green), ("exclaim", orange), ("sun", yellow))
-    for k, (cx, cy) in enumerate(junction_points(plan, rng, 8)):        # doodles sit in the gaps, not on faces
-        kind, col = kinds[k % 4]
-        doodle(canvas, kind, cx, cy, rng.randint(52, 76), col, rng, shadow=False)
+        s2 = dict(s); s2["w"] += 1; s2["h"] += 1                     # +1 px right/bottom: no hairline seam between tiles
+        tile, info = _tile(p, s2, theme="playful_hype"); s["mode"] = s2["mode"]
+        canvas.alpha_composite(tile.convert("RGBA"), (s["x"], s["y"]))
+        outline = rng.randint(*PH_OUTLINE)
+        mask = cut_mask(tile) if info["mode"] == "crop" else None   # no cutout on a contained (blurred-bg) tile
+        bbox = mask.point(lambda a: 255 if a > 40 else 0).getbbox() if mask is not None else None
+        res = None
+        if bbox:                                                    # subject pops out of its tile, over the neighbours
+            k, dx, dy = _pop_out(s, bbox, rng.uniform(1.12, 1.24), limits, outline * 1.45)
+            cxt, cyt = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+            big = tile if k == 1.0 else tile.resize((round(tile.width * k), round(tile.height * k)), Image.Resampling.LANCZOS)
+            bigm = mask if k == 1.0 else mask.resize(big.size, Image.Resampling.LANCZOS)
+            res = fx.torn_die_cut(big, bigm, outline, rng)
+            if res is not None:
+                sprite, (ox, oy) = res
+                gx = s["x"] + (bbox[0] + bbox[2]) / 2 + dx - k * cxt + ox
+                gy = s["y"] + (bbox[1] + bbox[3]) / 2 + dy - k * cyt + oy
+                half_w, half_h = (bbox[2] - bbox[0]) * k / 2, (bbox[3] - bbox[1]) * k / 2
+                ccx, ccy = s["x"] + (bbox[0] + bbox[2]) / 2 + dx, s["y"] + (bbox[1] + bbox[3]) / 2 + dy
+                sub_box = (ccx - half_w, ccy - half_h, ccx + half_w, ccy + half_h)
+                overlays.append((s["w"] * s["h"], sprite, int(round(gx)), int(round(gy)), sub_box))
+        if res is None:                                             # fallback: the WHOLE tile gets a torn white rim
+            tm = fx.torn_mask(tile.size, rng, amp=6, wavelength=44, fibre=False)
+            res = fx.torn_die_cut(tile, tm, outline, rng)
+            if res is not None:
+                sprite, (ox, oy) = res
+                overlays.append((s["w"] * s["h"], sprite, s["x"] + ox, s["y"] + oy, None))
+            else:                                                   # cannot happen (tm is never empty) - keep the plain tile
+                log.warning("playful_hype: torn fallback produced nothing")
+    overlays.sort(key=lambda o: o[0])                               # small tiles first, hero on top
+
+    # ---- doodles: hand-drawn assets, each rotated; ~half UNDER the cutouts, ~half OVER them
+    seams = _seam_points(plan, limits)
+    cut_pts = []                                                    # points just OUTSIDE a cutout's edge: a doodle there is half under it
+    for _z, _sp, _x, _y, bx in overlays:
+        if bx:
+            bw, bh = bx[2] - bx[0], bx[3] - bx[1]
+            cut_pts += [(bx[0] - 26, bx[1] + bh * .22), (bx[0] - 26, bx[1] + bh * .62), (bx[2] + 26, bx[1] + bh * .3),
+                        (bx[2] + 26, bx[1] + bh * .75), (bx[0] + bw * .3, bx[1] - 22), (bx[0] + bw * .75, bx[1] - 22)]
+    cut_pts = [(int(x), int(y)) for x, y in cut_pts if 50 <= x <= W - 50 and limits[1] + 50 <= y <= plan["caption_top"] - 20]
+    rng.shuffle(seams); rng.shuffle(cut_pts)
+    n_d = min(8, max(5, len(seams) + len(cut_pts)))
+    behind, front = [], []
+    for k in range(n_d):
+        kind, col = PH_DOODLES[k % 4]
+        is_front = (k + k // 4) % 2 == 1 or not cut_pts            # no cutouts (fallback): nothing to hide behind
+        pool = (seams if is_front else cut_pts) or seams or cut_pts   # under-doodles hug a cutout so it really covers part of them
+        if not pool:
+            continue
+        cx, cy = pool.pop()
+        cx += rng.randint(-14, 14); cy += rng.randint(-14, 14)
+        item = (kind, cx, cy, rng.randint(104, 150), col, rng.choice((-1, 1)) * rng.uniform(8, 26))
+        (front if is_front else behind).append(item)
+
+    def _doodles(items):
+        for kind, cx, cy, size, col, ang in items:
+            doodle(canvas, kind, cx, cy, size, col, rng, shadow=True, angle=ang)
+    _doodles(behind)
+    for _z, sprite, x, y, _bx in overlays:
+        fx.place(canvas, sprite, x, y, mode="normal", contact=(3, (2, 4), .5), ambient=(16, (5, 12), .45))
+    _doodles(front)
     d = ImageDraw.Draw(canvas)
     text = str(copy.get("text", "")).upper()
     if text:
@@ -234,30 +332,11 @@ def playful_hype(photos, copy, rng, ctx):
 
 
 # ------------------------------------------------------------------ 2. k-pop editorial
+# Vogue-cover collage look (B&W, gradient serif masthead behind the cut-out subject, small serif names list on the sides).
+# All of it lives in kpop_editorial_fx.py; without a usable rembg cut-out the tile uses its own side-text fallback.
 def kpop_editorial(photos, copy, rng, ctx):
-    canvas = fx.paper_bg((242, 242, 246), "fine", .6)
-    photos, slots, plan = _plan(ctx, photos)
-    purple, orchid = (123, 108, 255, 235), (205, 110, 255, 235)
-    for k, (p, s) in enumerate(zip(photos, slots)):
-        tw, th = s["w"], s["h"]
-        tile, info = _tile(p, s, theme="kpop_editorial")              # grade = lavender-fade mono
-        col = purple if k % 2 == 0 else orchid
-        t = tile.convert("RGBA"); d = ImageDraw.Draw(t)
-        narrow = tw < 600
-        word = "VIBE" if narrow else "VIBEOS"; fs = int(tw * (.62 if narrow else .30)); f = font("bodoni_i", fs)
-        while d.textlength(word, font=f) > tw * .86 and fs > 60: fs -= 8; f = font("bodoni_i", fs)
-        mask = cut_mask(tile) if info["mode"] == "crop" else None
-        layer = Image.new("RGBA", t.size, (0, 0, 0, 0)); ImageDraw.Draw(layer).text((tw // 2, 10), word, font=f, fill=col, anchor="ma")
-        t.alpha_composite(layer)
-        if mask is not None:                                       # subject re-pasted over the masthead = overlap look, inside its own slot
-            t.paste(tile.convert("RGBA"), (0, 0), mask.filter(ImageFilter.GaussianBlur(.8)))
-        if k == 0:                                                 # the headline lives on the hero tile only
-            tf = font("playfair_i", min(64, int(th * .11)))
-            lines = wrap(d, str(copy.get("text", "")).lower(), tf, tw - 60, 2)
-            ImageDraw.Draw(t).text((30, th - 30 - len(lines) * int(tf.size * 1.15)), "\n".join(lines), font=tf, fill=col)
-        ImageDraw.Draw(t).rectangle((0, 0, tw - 1, th - 1), outline=col, width=5)
-        fx.place(canvas, t, s["x"], s["y"], contact=(2.5, (1, 3), .32), ambient=(16, (0, 9), .2))
-    return canvas
+    from . import kpop_editorial_fx as kp
+    return kp.render(photos, copy, rng, ctx)
 
 
 # ------------------------------------------------------------------ 3. photo dump
@@ -308,128 +387,24 @@ def photo_dump(photos, copy, rng, ctx):
 
 
 # ------------------------------------------------------------------ 4. streetwear / baddie
-def _halftone_panel(pw, ph, hero, rng, cell=10):
-    """Dark halftone panel with a torn edge. Dots are drawn at 2x and downsampled (smooth dots, no jaggies)."""
-    ss = fx.SS
-    bg = hero.filter(ImageFilter.GaussianBlur(2)).point(lambda v: int(v * .55))
-    small = bg.resize((max(1, pw // cell), max(1, ph // cell)), Image.Resampling.BOX); sp = small.tobytes()
-    dots = Image.new("L", (pw * ss, ph * ss), 255); dd = ImageDraw.Draw(dots); c2 = cell * ss
-    for gy in range(small.height):
-        for gx in range(small.width):
-            rr = (1 - sp[gy * small.width + gx] / 255) * c2 * .72
-            cx, cy = gx * c2 + c2 / 2, gy * c2 + c2 / 2
-            dd.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), fill=0)
-    dots = dots.resize((pw, ph), Image.Resampling.LANCZOS)
-    panel = Image.merge("RGBA", (dots, dots, dots, Image.new("L", (pw, ph), 255)))
-    panel.putalpha(fx.torn_mask((pw, ph), rng, amp=10, wavelength=90))
-    return panel
-
-
+# Halftone B&W zine look on a noisy dark background. Everything lives in streetwear_fx.py (no other style touches it).
 def streetwear_baddie(photos, copy, rng, ctx):
-    canvas = fx.paper_bg((230, 230, 224), "crumple")               # photocopy / zine paper
-    d = ImageDraw.Draw(canvas); neon = (182, 255, 60, 255); ink = (14, 14, 14, 255)
-    photos, slots, plan = _plan(ctx, photos, header=84, caption=215)       # slot 0 = hero (the planner makes it the biggest fit)
-    issue = _dt(photos[0]).timetuple().tm_yday
-    d.text((W // 2, SAFE_Y0 + 6), f"VIBEOS RAW / ISSUE #{issue:02d}", font=font("anton", 50), fill=ink, anchor="ma")
-    bx0, by0 = min(s["x"] for s in slots) - 14, min(s["y"] for s in slots) - 14           # dark halftone panel behind the whole grid
-    bx1, by1 = max(s["x"] + s["w"] for s in slots) + 14, max(s["y"] + s["h"] for s in slots) + 14
-    pw, ph = bx1 - bx0, by1 - by0
-    hero = ImageOps.grayscale(fx.grade(fit(photos[0], (pw, ph)), "streetwear_baddie"))
-    canvas.alpha_composite(_halftone_panel(pw, ph, hero, rng), (bx0, by0))
-    for k, (p, s) in enumerate(zip(photos, slots)):
-        if k == 0:                                                         # hero: die-cut subject, else white-framed tile
-            sub, sinfo = _tile(p, s, theme="streetwear_baddie")             # high-contrast B&W grade
-            mask = cut_mask(sub) if sinfo["mode"] == "crop" else None
-            if mask is not None:
-                canvas.alpha_composite(die_cut(sub, mask, 12), (s["x"], s["y"]))
-            else:
-                t = sub.convert("RGBA"); ImageDraw.Draw(t).rectangle((0, 0, s["w"] - 1, s["h"] - 1), outline=(255, 255, 255, 255), width=10)
-                canvas.alpha_composite(t, (s["x"], s["y"]))
-        else:                                                              # torn B&W snippets
-            im, _i = _tile(p, s, inset=10, theme="streetwear_baddie")
-            cd, x, y = _in_slot(fx.torn_card(im, rng, border=14, amp=7, angle=rng.uniform(-2, 2)), s)
-            fx.place(canvas, cd, x, y, contact=(3.5, (2, 4), .6), ambient=(20, (7, 15), .4))
-            _tape(canvas, s["x"] + s["w"] // 2 + rng.randint(-30, 30), s["y"] + 18, 130, 34, rng.uniform(-10, 10), rng, "masking", (190, 255, 70))
-    d = ImageDraw.Draw(canvas); s0 = slots[0]
-    for text, kind, size, xy, fill in (("STYLE 01", "anton", min(58, int((s0["w"] - 40) / 4.6)), (s0["x"] + 14, s0["y"] + 14), (255, 255, 255, 255)),
-                                       ("MUST HAVE!", "marker", min(40, int((s0["w"] - 40) / 7.0)), None, neon)):
-        f = font(kind, size); wdt = d.textlength(text, font=f)
-        if xy is None:
-            xy = (s0["x"] + 14, s0["y"] + s0["h"] - size - 36)
-        d.rectangle((xy[0] - 10, xy[1] - 6, xy[0] + wdt + 10, xy[1] + size + 14), fill=fill); d.text(xy, text, font=f, fill=ink)
-    top = plan["caption_top"]
-    d.text((MARGIN_X, top + 6), str(copy.get("text", "")).upper()[:36], font=font("bebas", 42), fill=ink)
-    d.text((MARGIN_X, top + 52), "ZINE CULTURE", font=font("anton", 88), fill=ink)
-    side_txt = "THE FIT IS READY  /  GRITTY LOOK  /  " + _dt(photos[0]).strftime("FALL '%y"); sf = font("bebas", 36)
-    while d.textlength(side_txt, font=sf) > by1 - by0 and len(side_txt) > 8: side_txt = side_txt[:-2]
-    side = Image.new("RGBA", (int(d.textlength(side_txt, font=sf)) + 4, 48), (0, 0, 0, 0)); ImageDraw.Draw(side).text((0, 0), side_txt, font=sf, fill=ink)
-    side = side.rotate(-90, expand=True, resample=Image.Resampling.BICUBIC); canvas.alpha_composite(side, (W - 50, by0))
-    if fx.sticker("asterisk", 8) is not None:                                # neon asterisks in the gaps (asset sprites only)
-        for cx, cy in junction_points(plan, rng, 3):
-            doodle(canvas, "asterisk", cx, cy, rng.randint(46, 62), neon[:3], rng, shadow=False)
-    return canvas
+    from . import streetwear_fx as sw
+    return sw.render(photos, copy, rng, ctx)
 
 
 # ------------------------------------------------------------------ 5. classy editorial
 def classy_editorial(photos, copy, rng, ctx):
-    canvas = fx.paper_bg((238, 236, 230), "fine"); d = ImageDraw.Draw(canvas); ink = (30, 28, 26, 255)
-    photos, slots, plan = _plan(ctx, photos, header=70, caption=235)
-    d.line((MARGIN_X, SAFE_Y0 + 8, W - MARGIN_X, SAFE_Y0 + 8), fill=ink, width=3)
-    d.text((MARGIN_X, SAFE_Y0 + 22), "N° " + _dt(photos[0]).strftime("%d"), font=font("bodoni", 30), fill=ink)
-    d.text((W - MARGIN_X, SAFE_Y0 + 22), _dt(photos[0]).strftime("%B %Y").upper(), font=font("bodoni", 30), fill=ink, anchor="ra")
-    for p, s in zip(photos, slots):
-        im, _i = _tile(p, s, inset=14, theme="classy_editorial")      # muted, slightly warm
-        cd = fx.torn_card(im, rng, border=14, torn=False, paper=(250, 249, 245))
-        fx.place(canvas, cd, s["x"], s["y"], contact=(3, (0, 3), .3), ambient=(20, (0, 11), .26))
-    d = ImageDraw.Draw(canvas)
-    t = str(copy.get("text", "")).capitalize(); top = plan["caption_top"]
-    f, lines = _fit_font(d, t, "playfair_i", 70, W - 2 * MARGIN_X, 42, 2); y = top + 6
-    for ln in lines: d.text((MARGIN_X, y), ln, font=f, fill=ink); y += int(f.size * 1.2)
-    d.line((MARGIN_X, SAFE_Y1 - 40, W - MARGIN_X, SAFE_Y1 - 40), fill=ink, width=2); d.text((MARGIN_X, SAFE_Y1 - 34), "FOLK.", font=font("bodoni", 28), fill=ink)
-    return canvas
+    from . import classy_editorial_fx as ce                # bone page, hairline tiles, 8 px grid (see that file)
+    return ce.render(photos, copy, rng, ctx)
 
 
 # ------------------------------------------------------------------ 6. scrapbook chaos
-_WASHI = (("washi_stripe", (255, 150, 180)), ("washi_dots", (140, 185, 255)), ("washi_stripe", (255, 214, 100)),
-          ("masking", (236, 226, 186)), ("washi_dots", (170, 225, 170)), ("clear", None))
-
-
 def scrapbook_chaos(photos, copy, rng, ctx):
-    canvas = fx.paper_bg((243, 238, 228), "crumple", .8)
-    photos, slots, plan = _plan(ctx, photos, caption=330)
-    for p, s in zip(photos, slots):
-        im, _i = _tile(p, s, inset=16, theme="scrapbook_chaos")
-        cd, x, y = _in_slot(fx.torn_card(im, rng, border=16, amp=7, angle=rng.uniform(-3, 3)), s)
-        fx.place(canvas, cd, x, y, contact=(3.5, (2, 4), .62), ambient=(22, (8, 17), .38))
-        kind, tint = rng.choice(_WASHI)
-        _tape(canvas, s["x"] + rng.randint(40, max(41, s["w"] - 40)), s["y"] + 18, 170, 40, rng.uniform(-14, 14), rng, kind, tint)
-    pal = [(231, 140, 120), (118, 90, 150), (240, 196, 70), (86, 130, 110), (176, 80, 90), (120, 150, 200), (240, 170, 190)]
-    cream = (252, 248, 238)
-    top = plan["caption_top"]
-    word = _dt(photos[0]).strftime("%b").lower() + " dump"; step = min(124, (W - 2 * MARGIN_X) // len(word)); tw = step - 8; th = int(tw * 1.17)
-    x = (W - step * len(word)) // 2 + 4; prev = None
-    for ch in word:                                                       # ransom-note letters: a different font on EVERY letter
-        if ch != " ":
-            fam = rng.choice([f_ for f_ in fx.SCRAP_LETTER_FONTS if f_ != prev]); prev = fam
-            col = pal[rng.randrange(len(pal))]
-            inverse = rng.random() < .28                                   # some letters are cream paper with a coloured glyph
-            tile = fx.torn_tile((tw, th), rng, cream if inverse else col, amp=3)
-            fnt = font(fam, int(tw * (.9 if fam in ("anton", "bebas") else .8)))
-            ImageDraw.Draw(tile).text((tw // 2, th // 2 + 2), ch, font=fnt, fill=(col if inverse else cream) + (255,), anchor="mm")
-            tile = tile.rotate(rng.uniform(-6, 6), expand=True, resample=Image.Resampling.BICUBIC)
-            fx.place(canvas, tile, x - (tile.width - tw) // 2, top + 6 - (tile.height - th) // 2, contact=(2.5, (1, 3), .55), ambient=(9, (3, 6), .3))
-        x += step
-    t = str(copy.get("text", "")).lower()
-    strip = fx.scrap((W - 2 * MARGIN_X, 124), rng)                         # torn paper strip from the asset pack
-    sd = ImageDraw.Draw(strip); f, lines = _fit_font(sd, t, "caveat", 64, strip.width - 90, 34, 2, 700); lh = int(f.size * 1.05)
-    y = (strip.height - lh * len(lines)) // 2 + lh // 2
-    for ln in lines: sd.text((strip.width // 2, y), ln, font=f, fill=(40, 34, 28), anchor="mm"); y += lh
-    strip = strip.rotate(-1.2, expand=True, resample=Image.Resampling.BICUBIC)
-    fx.place(canvas, strip, (W - strip.width) // 2, top + 172, contact=(3, (2, 4), .55), ambient=(14, (4, 9), .3))
-    for k, (cx, cy) in enumerate(junction_points(plan, rng, 6)):
-        if k % 2 == 0: doodle(canvas, "flower", cx, cy, rng.randint(64, 86), rng.choice([(247, 226, 140), (245, 190, 200), (255, 255, 255)]), rng)
-        else: doodle(canvas, "sparkle", cx, cy, rng.randint(46, 66), (255, 214, 80), rng)
-    return canvas
+    """Dense, overlapping paper-scrap collage: irregular torn photos + rembg cut-outs, ransom-note title, PNG flowers /
+    stickers, handwritten note, tape, kraft / pink / cream paper layers. All of it lives in scrapbook_chaos_fx.py."""
+    from . import scrapbook_chaos_fx as sc
+    return sc.render(photos, copy, rng, ctx)
 
 
 STYLES = {"playful_hype": playful_hype, "kpop_editorial": kpop_editorial, "photo_dump": photo_dump,

@@ -372,6 +372,73 @@ def die_cut(tile, mask, outline=14, color=(255, 255, 255)):
     return out
 
 
+# =============================================================== torn-paper die-cut (ragged white outline)
+def _smooth_noise(shape, nrng, cell):
+    """Smooth 2-D value noise (float32, h x w), zero mean / unit std. `cell` = feature size in px."""
+    h, w = shape
+    g = Image.fromarray(nrng.standard_normal((max(2, h // cell + 2), max(2, w // cell + 2))).astype(np.float32), "F")
+    a = np.asarray(g.resize((w, h), BICUBIC), np.float32)
+    return (a - a.mean()) / (a.std() + 1e-6)
+
+
+def _dist_outside(inside):
+    """float32 distance (px) from every pixel to the nearest True pixel of `inside` (0 inside). None if no backend."""
+    try:
+        import cv2
+        return cv2.distanceTransform((~inside).astype(np.uint8), cv2.DIST_L2, 5)
+    except Exception:
+        pass
+    try:
+        from scipy import ndimage
+        return ndimage.distance_transform_edt(~inside).astype(np.float32)
+    except Exception:
+        return None
+
+
+def torn_die_cut(tile, mask, outline=16, rng=None, wobble=0.55, paper=(252, 250, 245)):
+    """Cut-out subject with a RAGGED torn-paper white outline (not a clean offset ring).
+
+    The mask is dilated by a distance field whose reach is wobbled by noise: big slow bumps (tears), medium bumps
+    and a fine tooth, then the very edge gets a little fibre fuzz. The ring is paper-textured, not flat white.
+    Works at 1x (distance is float, so the edge is anti-aliased by its own 1 px ramp) -> light on a 512 MB worker.
+    Returns (sprite RGBA, (ox, oy)): sprite's top-left relative to the tile's origin (may be negative), or None
+    when the mask is empty."""
+    rng = rng or random.Random(0)
+    tile = tile.convert("RGB")
+    m = mask.convert("L").filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.9))   # 1 px erode: no bg halo
+    bbox = m.point(lambda a: 255 if a > 40 else 0).getbbox()
+    if not bbox:
+        return None
+    pad = int(outline * (1 + wobble) + 8)
+    x0, y0, x1, y1 = bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad
+    w, h = x1 - x0, y1 - y0
+    sm = Image.new("L", (w, h), 0); sm.paste(m.crop(bbox), (pad, pad))
+    sa = np.asarray(sm, np.float32) / 255.0
+    nrng = np_rng(rng)
+    dist = _dist_outside(sa > 0.5)
+    if dist is not None:
+        low = np.clip(_smooth_noise((h, w), nrng, 34), -2, 2)
+        mid = np.clip(_smooth_noise((h, w), nrng, 12), -2, 2)
+        fine = _smooth_noise((h, w), nrng, 4)
+        reach = outline * (1 + wobble * (0.7 * low + 0.3 * mid)) + 1.5 * fine
+        reach = np.maximum(reach, outline * 0.4)
+        ring = np.clip(reach - dist + 0.5, 0, 1)
+        edge = np.clip(1 - (reach - dist) / 3.0, 0, 1) * (dist > 0)          # outer ~3 px: paper fibres
+        fuzz = _smooth_noise((h, w), nrng, 2)
+        ring *= 1 - edge * 0.38 * (0.5 + 0.5 * np.clip(fuzz, -1, 1))
+    else:                                                                       # no cv2 / scipy: noise-modulated threshold
+        field = np.asarray(sm.filter(ImageFilter.GaussianBlur(outline * 0.9)), np.float32) / 255.0
+        thr = 0.14 + 0.07 * np.clip(_smooth_noise((h, w), nrng, 14), -2, 2)
+        ring = np.clip((field - thr) * 14 + 0.5, 0, 1)
+    ring_img = Image.fromarray((np.clip(np.maximum(ring, sa), 0, 1) * 255).astype(np.uint8), "L")
+    out = paper_patch((w, h), rng, paper).convert("RGBA")
+    out.putalpha(ring_img)
+    sub = Image.new("RGB", (w, h), (0, 0, 0)); sub.paste(tile.crop(bbox), (pad, pad))
+    sub = sub.convert("RGBA"); sub.putalpha(sm)
+    out.alpha_composite(sub)
+    return out, (x0, y0)
+
+
 # =============================================================== sprites from the asset pack
 def sticker(name, size, fill=None, angle=0, rng=None):
     """Hand-drawn doodle sprite from assets/collage/stickers/<name>.png scaled so its longer side is `size`.

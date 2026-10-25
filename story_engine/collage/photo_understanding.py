@@ -1,6 +1,7 @@
 """Photo feature extraction for the collage worker.
 
-inspect_photo()  -> cheap technical features (sharpness, exposure, contrast, resolution).
+inspect_photo()  -> cheap technical features (sharpness, exposure, contrast, resolution, face quality,
+                    aHash + dHash + colour layout for duplicate / variety checks).
 locate_subject() -> subject_box / face_box (YuNet -> rembg mask -> saliency -> default). The selector runs it
                     only for the photos it actually picked.
 groq_describe()  -> optional vision description. Its quality_score is an LLM guess, so it is returned
@@ -224,10 +225,48 @@ def ahash(im):
     return sum(1 << i for i, v in enumerate(px) if v >= avg)
 
 
+def dhash(im):
+    """64-bit gradient hash (9x8). Structure-based, so it survives exposure / colour edits better than aHash."""
+    px = list(im.convert("L").resize((9, 8), Image.Resampling.BOX).tobytes())
+    bits = 0
+    for r in range(8):
+        for c in range(8):
+            if px[r * 9 + c] > px[r * 9 + c + 1]:
+                bits |= 1 << (r * 8 + c)
+    return bits
+
+
+def color_sig(im):
+    """4x4 RGB layout (48 ints): which colours sit where. Same place / same backdrop -> similar signature."""
+    return list(im.resize((4, 4), Image.Resampling.BOX).tobytes())
+
+
+def _face_quality(det, faces, global_sharp):
+    """0..1 quality of the MAIN face (sharpness of the face crop, face exposure, face size). None when no face.
+    Picks 'sharp background + blurry face' apart from a truly good portrait."""
+    if not faces:
+        return None
+    area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
+    fb = max(faces, key=area)
+    w, h = det.size
+    x0, y0 = int(fb[0] * w), int(fb[1] * h)
+    x1, y1 = max(int(fb[2] * w), x0 + 8), max(int(fb[3] * h), y0 + 8)
+    crop = det.crop((x0, y0, x1, y1))
+    gray = crop.convert("L")
+    sharp = _sharpness(gray) if min(crop.size) >= 24 else global_sharp      # tiny crop: Laplacian is unreliable
+    exposure = _clamp(1.0 - abs(ImageStat.Stat(gray).mean[0] - 130) / 130.0)
+    size = _clamp((area(fb) ** 0.5) / 0.25)
+    q = 0.5 * sharp + 0.25 * exposure + 0.25 * size
+    if fb[0] <= 0.002 or fb[1] <= 0.002 or fb[2] >= 0.998 or fb[3] >= 0.998:   # face cut by the frame edge
+        q *= 0.8
+    return round(_clamp(q), 3)
+
+
 def inspect_photo(raw):
     full = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
     width, height = full.size
-    im = full.copy(); im.thumbnail((512, 512)); del full
+    im = full.copy(); im.thumbnail((512, 512))
+    det = full.copy(); det.thumbnail((800, 800)); del full          # 800 px copy only for face detection
     stat = ImageStat.Stat(im)
     brightness = sum(stat.mean) / 3
     contrast = sum(stat.stddev) / 3
@@ -237,11 +276,19 @@ def inspect_photo(raw):
     res = _clamp((width * height) / 1_500_000)
     portrait = 1.0 if height >= width * 0.9 else 0.75                   # stories are vertical
     technical = 0.40 * sharp + 0.25 * exposure + 0.15 * contrast_s + 0.10 * res + 0.10 * portrait
+    faces = detect_faces(det)                                           # [] when YuNet / model is missing -> no change
+    fq = _face_quality(det, faces, sharp)
+    if fq is not None:                                                  # people photos: the FACE must be good too
+        technical = 0.75 * technical + 0.25 * fq
+    fb = _box_union(faces) if faces else None
+    del det
     return {"width": width, "height": height, "brightness": round(brightness, 1),
             "contrast": round(contrast, 1), "sharpness": round(sharp, 3),
             "technical_quality": round(_clamp(technical), 3),
+            "faces": len(faces), "face_quality": fq,
+            "face_area": round((fb[2] - fb[0]) * (fb[3] - fb[1]), 4) if fb else 0.0,
             "dominant_rgb": list(map(int, im.resize((1, 1)).getpixel((0, 0)))),
-            "hash": ahash(im), "visual": "photo"}
+            "hash": ahash(im), "dhash": dhash(im), "color_sig": color_sig(im), "visual": "photo"}
 
 
 def _groq_vision(raw, prompt, max_tokens, size=768):
