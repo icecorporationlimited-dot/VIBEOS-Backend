@@ -221,15 +221,20 @@ class PublishService:
         if fmt not in FORMATS:
             raise PublishError(f"Unknown format: {fmt}")
         asset_ids = list(asset_ids)
-        # Collage outputs are story-only at the service boundary (not merely UI metadata).
-        # Fail closed if an asset carries the marker, regardless of caller/route.
+        # A generated collage is EITHER a Story OR a feed Post (decided when it was made). Enforce both ways at the
+        # service boundary, regardless of caller/route.
         for aid in asset_ids:
             try:
                 asset = self.buffer.assets.find_one({"_id": aid})
             except Exception:
                 asset = None
-            if asset and (asset.get("story_only") or asset.get("content_kind") == "story_collage") and fmt != "story":
+            if not asset:
+                continue
+            kind = asset.get("content_kind")
+            if (asset.get("story_only") or kind == "story_collage") and fmt != "story":
                 raise PublishError("This generated collage is story-only; feed/photo/carousel/reel publishing is blocked.")
+            if (asset.get("post_only") or kind == "post_collage") and fmt != "photo":
+                raise PublishError("This generated collage is post-only; story/carousel/reel publishing is blocked.")
         if fmt == "carousel":
             if not 2 <= len(asset_ids) <= 10:
                 raise PublishError("A carousel needs 2 to 10 photos.")
