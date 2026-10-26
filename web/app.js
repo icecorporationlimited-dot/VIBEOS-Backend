@@ -9,6 +9,7 @@
   //   POST /web/api/autopilot   switch on/off, daily limit, times, quiet hours, reels, trend stories, comment replies
   const $ = id => document.getElementById(id);
   const escapeHTML = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const ic = n => '<svg class="ic" aria-hidden="true"><use href="#i-' + n + '"/></svg>';
 
   let me = {signed_in: false};
   let state = null;                 // last /web/api/state
@@ -27,6 +28,7 @@
     try { return new Date(v).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}); } catch (_) { return ''; }
   }
   function browserTZ() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
+  function firstName() { return ((me.name || '').trim().split(/\s+/)[0]) || ''; }
 
   async function call(path, options = {}) {
     const headers = Object.assign({}, options.headers || {});
@@ -45,7 +47,7 @@
 
   function requireLogin() {
     if (me.signed_in) return true;
-    toast('Please sign in first.');
+    toast('Sign in first.');
     setTimeout(() => { location.href = '/login'; }, 700);
     return false;
   }
@@ -53,20 +55,21 @@
   // --------------------------------------------------------------- navigation
   function navigate(view) {
     document.querySelectorAll('.view').forEach(e => e.classList.toggle('active', e.id === 'view-' + view));
-    document.querySelectorAll('[data-view]').forEach(e => e.classList.toggle('active', e.classList.contains('nav-item') && e.dataset.view === view));
-    const names = {dashboard:'Overview', media:'Media library', occasions:'Occasions', notifications:'Activity', settings:'Settings'};
-    $('crumbTitle').textContent = names[view] || 'Overview';
-    $('sidebar').classList.remove('open');
+    document.querySelectorAll('.nav-item[data-view], .tab-item[data-view]').forEach(e => {
+      const on = e.dataset.view === view;
+      e.classList.toggle('active', on);
+      if (on) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
+    });
     window.location.hash = view;
+    window.scrollTo(0, 0);
     if (view === 'occasions') loadOccasions();
   }
   document.querySelectorAll('[data-view]').forEach(e => e.addEventListener('click', () => navigate(e.dataset.view)));
-  $('mobileMenu').addEventListener('click', () => $('sidebar').classList.toggle('open'));
-  $('tipButton').addEventListener('click', e => { e.currentTarget.closest('.help-card').style.display = 'none'; });
+  $('tipButton').addEventListener('click', e => { e.currentTarget.closest('.tip').style.display = 'none'; });
 
   // ------------------------------------------------------------------- upload
   function openPicker() { if (requireLogin()) $('filePicker').click(); }
-  ['topUpload', 'emptyUpload', 'mediaUpload', 'emptyMediaUpload'].forEach(id => { const el = $(id); if (el) el.addEventListener('click', openPicker); });
+  ['sideAdd', 'tabAdd', 'heroAdd', 'emptyUpload', 'mediaUpload', 'emptyMediaUpload'].forEach(id => { const el = $(id); if (el) el.addEventListener('click', openPicker); });
 
   $('filePicker').addEventListener('change', async e => {
     const picked = [...(e.target.files || [])].filter(f => f.type.startsWith('image/'));
@@ -89,7 +92,7 @@
     if (added) parts.push(added + ' photo' + (added === 1 ? '' : 's') + ' added');
     if (dup) parts.push(dup + ' already in your buffer');
     if (failed) parts.push(failed + ' failed' + (lastError ? ' (' + lastError + ')' : ''));
-    toast(parts.join(' · ') || 'Nothing was uploaded');
+    toast(parts.join(', ') || 'Nothing was uploaded');
   });
 
   async function deleteMedia(id) {
@@ -99,15 +102,14 @@
   }
 
   // ---------------------------------------------------------------- rendering
-  function chip(m) { return '<span class="draft-chip chip-' + escapeHTML(m.state) + '">' + escapeHTML(m.label) + '</span>'; }
+  function chip(m) { return '<span class="chip chip-' + escapeHTML(m.state) + '">' + escapeHTML(m.label) + '</span>'; }
 
   function mediaCard(m) {
-    const when = m.when ? ' · ' + escapeHTML(dateTimeLabel(m.when)) : '';
-    return '<article class="media-card"><img class="media-thumb" loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' +
-      '<div class="media-card-info"><span class="media-card-title" title="' + escapeHTML(m.name) + '">' + escapeHTML(m.name) + '</span>' +
-      '<div class="media-card-meta"><span>' + sizeLabel(m.size) + '</span><span>' + dateLabel(m.created_at) + '</span></div>' +
-      '<div class="media-card-meta">' + chip(m) + '<small>' + when + '</small></div>' +
-      '<div class="media-card-actions"><button class="mini-action delete" data-delete-media="' + escapeHTML(m.id) + '">Delete</button></div></div></article>';
+    const when = m.when ? dateTimeLabel(m.when) : '';
+    const title = m.name + ', ' + sizeLabel(m.size) + ', added ' + dateLabel(m.created_at);
+    return '<article class="mtile" title="' + escapeHTML(title) + '"><img loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' +
+      '<button class="del" data-delete-media="' + escapeHTML(m.id) + '" aria-label="Delete photo">' + ic('trash') + '</button>' +
+      '<div class="mtile-info">' + chip(m) + (when ? '<time>' + escapeHTML(when) + '</time>' : '') + '</div></article>';
   }
 
   function renderMedia() {
@@ -116,8 +118,8 @@
     if (currentFilter !== 'all') rows = rows.filter(m => m.state === currentFilter);
     rows.sort((a, b) => $('mediaSort').value === 'oldest' ? new Date(a.created_at) - new Date(b.created_at) : new Date(b.created_at) - new Date(a.created_at));
     $('mediaGrid').innerHTML = rows.length ? rows.map(mediaCard).join('') :
-      '<div class="empty-large"><div class="empty-icon big">▧</div><h3>' + (currentFilter === 'all' ? 'Your library is waiting for its first upload' : 'No photos here yet') +
-      '</h3><p>Upload photos and VIBEOS takes it from there.</p><button class="primary-button" id="emptyMediaUpload2">＋ Upload photos</button></div>';
+      '<div class="empty big"><span class="empty-ic">' + ic('image') + '</span><h3>' + (currentFilter === 'all' ? 'No photos yet' : 'Nothing in this tab') +
+      '</h3><p>' + (currentFilter === 'all' ? 'Add some and autopilot takes it from there.' : 'Photos show up here as they move along.') + '</p><button class="btn" id="emptyMediaUpload2">Add photos</button></div>';
     const b = $('emptyMediaUpload2'); if (b) b.addEventListener('click', openPicker);
     document.querySelectorAll('[data-filter]').forEach(t => t.classList.toggle('active', t.dataset.filter === currentFilter));
     document.querySelectorAll('[data-delete-media]').forEach(btn => btn.addEventListener('click', () => deleteMedia(btn.dataset.deleteMedia)));
@@ -126,16 +128,15 @@
   }
 
   function renderRecent() {
-    const host = $('recentMedia'), items = ((state && state.media) || []).slice(0, 4);
+    const host = $('recentMedia'), items = ((state && state.media) || []).slice(0, 6);
     if (!items.length) {
-      host.className = 'recent-media empty-state'; host.removeAttribute('style');
-      host.innerHTML = '<div class="empty-icon">▧</div><strong>Your next great post starts here</strong><p>Upload photos to start building your media library.</p><button class="soft-button" id="emptyUpload2">＋ Add photos</button>';
+      host.className = 'empty';
+      host.innerHTML = '<span class="empty-ic">' + ic('image') + '</span><strong>Nothing here yet</strong><p>Add a few photos and they’ll show up here.</p><button class="btn ghost sm" id="emptyUpload2">Add photos</button>';
       $('emptyUpload2').addEventListener('click', openPicker); return;
     }
-    host.className = 'recent-media'; host.style.display = 'grid'; host.style.gridTemplateColumns = 'repeat(4,minmax(0,1fr))'; host.style.gap = '8px';
-    host.innerHTML = items.map(m => '<button title="' + escapeHTML(m.name) + '" data-recent="' + escapeHTML(m.id) + '" style="padding:0;border:0;background:none;min-width:0;text-align:left">' +
-      '<img src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '" style="display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px">' +
-      '<span style="display:block;font-size:11px;margin-top:4px;opacity:.75">' + escapeHTML(m.label) + '</span></button>').join('');
+    host.className = 'tiles';
+    host.innerHTML = items.map(m => '<button class="tile" title="' + escapeHTML(m.name) + '" data-recent="' + escapeHTML(m.id) + '">' +
+      '<img src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '" loading="lazy">' + chip(m) + '</button>').join('');
     host.querySelectorAll('[data-recent]').forEach(b => b.addEventListener('click', () => navigate('media')));
   }
 
@@ -144,6 +145,21 @@
     values.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = label(v); sel.appendChild(o); });
   }
   const hourLabel = h => String(h).padStart(2, '0') + ':00';
+
+  function renderHero() {
+    const t = $('heroTitle'), s = $('heroSub');
+    const c = (state && state.counts) || {}, ap = state && state.autopilot;
+    if (!me.signed_in) {
+      t.textContent = 'Drop the pics. We’ll handle the posting.';
+      s.textContent = 'Sign in, link your Instagram, and autopilot does the rest.'; return;
+    }
+    t.textContent = firstName() ? 'Hey, ' + firstName() + '.' : 'Hey you.';
+    if (!me.connected) s.textContent = 'Link your Instagram and you’re set.';
+    else if (ap && ap.active) {
+      const n = c.scheduled || 0;
+      s.textContent = n ? 'Autopilot’s on. ' + n + ' post' + (n === 1 ? ' is' : 's are') + ' lined up.' : 'Autopilot’s on. Add photos and it’ll line up posts.';
+    } else s.textContent = 'Autopilot’s off. Your photos wait in the library until you switch it on.';
+  }
 
   function renderAutopilot() {
     const ap = state && state.autopilot;
@@ -165,20 +181,21 @@
     }
     ['reelsToggle', 'trendToggle', 'repliesToggle', 'commentsToggle'].forEach(id => { $(id).disabled = !me.signed_in; });
     $('autoStat').textContent = on ? 'On' : 'Off';
-    $('autoFoot').textContent = ap ? 'Up to ' + ap.daily_limit + ' post' + (ap.daily_limit === 1 ? '' : 's') + ' a day' : 'Sign in to use Autopilot';
+    $('autoFoot').textContent = ap ? 'Up to ' + ap.daily_limit + ' post' + (ap.daily_limit === 1 ? '' : 's') + ' a day' : 'Sign in to use autopilot';
 
     const c = (state && state.counts) || {};
     const lines = [];
-    if (!me.signed_in) lines.push(['◷', 'Sign in to use Autopilot', '']);
+    if (!me.signed_in) lines.push(['clock', 'Sign in to use autopilot', '']);
     else {
-      lines.push([on ? '🟢' : '⚪', on ? 'Autopilot is ON' : 'Autopilot is OFF', on ? 'New photos are edited, captioned and scheduled for you.' : (c.waiting ? c.waiting + ' photo(s) waiting in your buffer.' : 'Turn it on and upload photos.')]);
-      if (on || c.ready || c.scheduled) lines.push(['▧', (c.processing || 0) + ' preparing · ' + (c.ready || 0) + ' ready', (c.scheduled || 0) + ' scheduled · ' + (c.posted || 0) + ' posted']);
-      if (ap && ap.next_post_at) lines.push(['◷', 'Next post', dateTimeLabel(ap.next_post_at)]);
+      lines.push([on ? 'bolt' : 'pause', on ? 'Autopilot is on' : 'Autopilot is off',
+        on ? 'New photos get edited, captioned and scheduled.' : (c.waiting ? c.waiting + (c.waiting === 1 ? ' photo is' : ' photos are') + ' waiting in your buffer.' : 'Turn it on, then add photos.')]);
+      if (on || c.ready || c.scheduled) lines.push(['image', (c.processing || 0) + ' preparing, ' + (c.ready || 0) + ' ready', (c.scheduled || 0) + ' scheduled, ' + (c.posted || 0) + ' posted']);
+      if (ap && ap.next_post_at) lines.push(['clock', 'Next post', dateTimeLabel(ap.next_post_at)]);
     }
-    $('autopilotStatus').innerHTML = lines.map(l => '<div class="empty-inline"><span>' + l[0] + '</span><div><strong>' + escapeHTML(l[1]) + '</strong>' + (l[2] ? '<small>' + escapeHTML(l[2]) + '</small>' : '') + '</div></div>').join('');
+    $('autopilotStatus').innerHTML = lines.map(l => '<div class="line"><span class="line-ic">' + ic(l[0]) + '</span><div><strong>' + escapeHTML(l[1]) + '</strong>' + (l[2] ? '<small>' + escapeHTML(l[2]) + '</small>' : '') + '</div></div>').join('');
 
     let note = 'Add photos and VIBEOS handles edits, captions and timing.';
-    if (me.signed_in && !me.connected) note = 'Connect your Instagram account so Autopilot can post.';
+    if (me.signed_in && !me.connected) note = 'Connect your Instagram account so autopilot can post.';
     else if (state && !state.posting_engine) note = 'Photos are prepared now. Posting starts when the hosted posting engine is enabled.';
     $('autopilotNote').textContent = note;
     $('engineNotice').hidden = !(me.signed_in && state && !state.posting_engine);
@@ -190,19 +207,27 @@
     $('mediaCount').textContent = total; $('statMedia').textContent = total;
     $('statQueue').textContent = c.scheduled || 0; $('statPosted').textContent = c.posted || 0;
     $('statQueueFoot').textContent = c.ready ? c.ready + ' ready for the next slot' : 'Autopilot picks the times';
+    document.body.classList.toggle('busy', (c.processing || 0) > 0);   // story ring spins while photos are prepared
   }
 
   function renderActivity() {
     const rows = (state && state.recent) || [];
-    const icon = {published:'✅', queued:'🕒', retry:'🔁', failed:'❌', held:'⏸', cancelled:'🚫', running:'⏳', needs_reauth:'🔑', needs_attention:'⚠️'};
-    const text = {published:'Posted', queued:'Scheduled', retry:'Retrying', failed:'Failed', held:'On hold', cancelled:'Cancelled', running:'Posting now', needs_reauth:'Reconnect Instagram', needs_attention:'Needs attention'};
-    $('notificationList').innerHTML = rows.length ? rows.map(r => '<article class="notification-item"><div class="notification-icon">' + (icon[r.status] || '✦') + '</div><div><strong>' +
-      escapeHTML((text[r.status] || r.status) + ' · ' + r.format) + '</strong><p>' + escapeHTML(r.error || (r.permalink ? 'Live on Instagram' : 'Handled by Autopilot')) +
-      '</p><time>' + escapeHTML(dateTimeLabel(r.at)) + '</time></div></article>').join('') :
-      '<div class="empty-large"><div class="empty-icon big">♧</div><h3>No activity yet</h3><p>Posts and scheduling events will show up here.</p></div>';
+    const look = {
+      published: ['check', 'ok', 'Posted'], queued: ['clock', 'info', 'Scheduled'], retry: ['retry', 'warn', 'Retrying'],
+      failed: ['x', 'bad', 'Failed'], held: ['pause', 'mute', 'On hold'], cancelled: ['ban', 'mute', 'Cancelled'],
+      running: ['loader', 'info', 'Posting now'], needs_reauth: ['key', 'warn', 'Reconnect Instagram'], needs_attention: ['alert', 'warn', 'Needs attention']
+    };
+    $('notificationList').innerHTML = rows.length ? rows.map(r => {
+      const l = look[r.status] || ['spark', 'mute', r.status];
+      const live = r.permalink && /^https:\/\//.test(r.permalink);
+      const detail = r.error ? escapeHTML(r.error) : live ? '<a href="' + escapeHTML(r.permalink) + '" target="_blank" rel="noopener">See it on Instagram</a>' : 'Autopilot handled it';
+      return '<article class="act"><span class="act-ic tone-' + l[1] + '">' + ic(l[0] === 'spark' ? 'bolt' : l[0]) + '</span><div class="act-main"><strong>' + escapeHTML(l[2]) +
+        ' <span class="fmt">' + escapeHTML(r.format) + '</span></strong><p>' + detail + '</p></div><time>' + escapeHTML(dateTimeLabel(r.at)) + '</time></article>';
+    }).join('') :
+      '<div class="empty big"><span class="empty-ic">' + ic('heart') + '</span><h3>Quiet for now</h3><p>Posts and schedule updates land here.</p></div>';
   }
 
-  function renderAll() { renderCounts(); renderMedia(); renderRecent(); renderAutopilot(); renderActivity(); schedulePoll(); }
+  function renderAll() { renderCounts(); renderMedia(); renderRecent(); renderAutopilot(); renderActivity(); renderHero(); schedulePoll(); }
 
   // ------------------------------------------------------------------ account
   function postConnect(csrf) {
@@ -210,34 +235,43 @@
     const i = document.createElement('input'); i.type = 'hidden'; i.name = 'csrf_token'; i.value = csrf;
     f.appendChild(i); document.body.appendChild(f); f.submit();
   }
+  function setAvatar(letter) { ['userAvatar', 'heroAvatar', 'topAvatar'].forEach(id => { $(id).textContent = letter; }); }
+  function setChip(text, cls) { const c = $('igStatusChip'); c.textContent = text; c.className = 'chip ' + cls; }
   function applyAccount(m) {
     me = m || {signed_in: false};
     const btns = [$('connectButton'), $('settingsConnect')];
-    const status = $('connectionStatus'), copy = $('connectCopy');
+    const status = $('connectionStatus'), copy = $('connectCopy'), card = $('connectCard');
     const set = (label, href, onclick, disabled) => btns.forEach(b => { if (!b) return;
       b.textContent = label; b.setAttribute('href', href || '#'); b.onclick = onclick || null;
-      b.style.pointerEvents = disabled ? 'none' : ''; b.style.opacity = disabled ? '.7' : ''; });
+      b.style.pointerEvents = disabled ? 'none' : ''; b.style.opacity = disabled ? '.6' : ''; });
+    document.body.classList.toggle('ig-on', !!(me.signed_in && me.connected));
+    card.dataset.state = (me.signed_in && me.connected) ? 'on' : 'off';
     if (!me.signed_in) {
-      $('userName').textContent = 'Guest'; $('userSub').textContent = 'Not signed in'; $('userAvatar').textContent = '?';
-      status.innerHTML = '<i></i> Signed out'; copy.textContent = 'Sign in, then connect your own Instagram professional account.';
-      $('igStatusText').textContent = 'Sign in to connect Instagram.';
-      set('Sign in', '/login'); return;
+      $('userName').textContent = 'Guest'; $('userSub').textContent = 'Not signed in'; setAvatar('?');
+      $('connectTitle').textContent = 'Link your Instagram';
+      status.innerHTML = '<i></i>Signed out'; copy.textContent = 'Sign in, then connect your own Instagram professional account.';
+      $('igStatusText').textContent = 'Sign in to connect Instagram.'; setChip('Signed out', 'chip-waiting');
+      set('Sign in', '/login'); renderHero(); return;
     }
     $('userName').textContent = me.name || 'Creator';
-    $('userAvatar').textContent = (me.name || 'C').trim().charAt(0).toUpperCase() || 'C';
+    setAvatar((me.name || 'C').trim().charAt(0).toUpperCase() || 'C');
     if (me.connected) {
       $('userSub').textContent = '@' + me.username;
-      status.innerHTML = '<i></i> Instagram connected: @' + escapeHTML(me.username);
-      copy.textContent = 'Your Instagram account @' + me.username + ' is connected to VIBEOS.';
-      $('igStatusText').textContent = 'Connected as @' + me.username;
-      set('Connected ✓', '#', e => e.preventDefault(), true); return;
+      $('connectTitle').textContent = 'Instagram linked';
+      status.innerHTML = '<i></i>Connected as @' + escapeHTML(me.username);
+      copy.textContent = 'Your account @' + me.username + ' is connected to VIBEOS.';
+      $('igStatusText').textContent = 'Connected as @' + me.username; setChip('Connected', 'chip-ready');
+      set('Connected', '#', e => e.preventDefault(), true); renderHero(); return;
     }
-    $('userSub').textContent = 'Instagram not connected';
-    status.innerHTML = '<i></i> ' + (me.account_status === 'needs_reauth' ? 'Reconnect needed' : 'Not connected');
+    $('userSub').textContent = 'Instagram not linked';
+    $('connectTitle').textContent = me.account_status === 'needs_reauth' ? 'Reconnect your Instagram' : 'Link your Instagram';
+    status.innerHTML = '<i></i>' + (me.account_status === 'needs_reauth' ? 'Reconnect needed' : 'Not connected');
     copy.textContent = 'Connect your own Instagram professional account to VIBEOS.';
     $('igStatusText').textContent = me.account_status === 'needs_reauth' ? 'Login expired. Reconnect to keep posting.' : 'No Instagram account connected yet.';
+    setChip(me.account_status === 'needs_reauth' ? 'Reconnect' : 'Not linked', me.account_status === 'needs_reauth' ? 'chip-scheduled' : 'chip-waiting');
     set(me.account_status === 'needs_reauth' ? 'Reconnect Instagram' : 'Connect Instagram', '#',
       e => { e.preventDefault(); if (me.csrf) postConnect(me.csrf); else location.href = '/login'; }, false);
+    renderHero();
   }
   async function loadMe() {
     try { const r = await fetch('/web/api/me', {credentials: 'same-origin', cache: 'no-store'}); applyAccount(r.ok ? await r.json() : {signed_in: false}); }
@@ -267,7 +301,7 @@
     const on = e.target.checked;
     const body = {enabled: on};
     if (on && state && !state.autopilot.timezone && browserTZ()) body.timezone = browserTZ();
-    saveAutopilot(body, on ? 'Autopilot is on' : 'Autopilot is off');
+    saveAutopilot(body, on ? 'Autopilot on. You’re set.' : 'Autopilot off. Photos will wait for you.');
   }));
   ['dailyLimit', 'dailyLimitDash'].forEach(id => $(id).addEventListener('change', e => saveAutopilot({daily_limit: Number(e.target.value)}, 'Daily limit saved')));
   $('reelsToggle').addEventListener('change', e => saveAutopilot(
@@ -283,7 +317,7 @@
     const slots = $('slotsInput').value.split(/[\s,]+/).filter(Boolean);
     const body = {slots, quiet_start: Number($('quietStart').value), quiet_end: Number($('quietEnd').value)};
     if (browserTZ()) body.timezone = browserTZ();
-    saveAutopilot(body, 'Autopilot settings saved');
+    saveAutopilot(body, 'Settings saved');
   });
 
   // ---------------------------------------------------------------- occasions
@@ -291,22 +325,22 @@
   const OCC_CATS = {festival: 'Festivals', national: 'National days', social: 'Social days', seasonal: 'Seasonal', awareness: 'Awareness days'};
   const OCC_STATE = {
     planned: ['Planned', 'chip-ready'],
-    auto_greeting: ['Will greet with your best photo', 'chip-processing'],
-    quiet: ['Quiet day, no greeting', 'chip-waiting'],
-    watching: ['Waits for a matching photo', 'chip-waiting']
+    auto_greeting: ['Greeting with your best pic', 'chip-processing'],
+    quiet: ['Quiet day', 'chip-waiting'],
+    watching: ['Waiting for a pic', 'chip-waiting']
   };
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  function occWhen(days) { return days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'in ' + days + ' days'; }
+  function occWhen(days) { return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'In ' + days + ' days'; }
   function renderOccasions() {
     if (!occ) return;
-    if (!occ.available) { $('occList').innerHTML = '<div class="empty-state"><strong>Not available yet</strong><p>The context engine is not switched on for this server.</p></div>'; return; }
+    if (!occ.available) { $('occList').innerHTML = '<div class="empty"><strong>Not available yet</strong><p>The context engine isn’t switched on for this server.</p></div>'; return; }
     const p = occ.prefs;
     $('occEnabled').checked = !!p.enabled;
     $('occGreeting').checked = !!p.auto_greeting;
     $('occPriority').value = p.min_priority >= 85 ? '85' : p.min_priority >= 70 ? '70' : '50';
     $('occSolemn').value = p.solemn;
     $('occCats').innerHTML = Object.keys(OCC_CATS).map(k =>
-      '<label class="occ-cat"><input type="checkbox" data-cat="' + k + '"' + (p.categories.includes(k) ? ' checked' : '') + '> ' + OCC_CATS[k] + '</label>').join('');
+      '<label class="occ-cat"><input type="checkbox" data-cat="' + k + '"' + (p.categories.includes(k) ? ' checked' : '') + '>' + OCC_CATS[k] + '</label>').join('');
     $('occCats').querySelectorAll('[data-cat]').forEach(b => b.addEventListener('change', () => {
       const cats = Array.from($('occCats').querySelectorAll('[data-cat]')).filter(x => x.checked).map(x => x.dataset.cat);
       saveOccasions({categories: cats});
@@ -318,15 +352,15 @@
       : 'No lunar festival dates are loaded. Fixed-date days still work.';
     $('occList').innerHTML = occ.occasions.length ? occ.occasions.map(o => {
       const s = OCC_STATE[o.state] || OCC_STATE.watching;
-      let d = o.date;
-      try { d = new Date(o.date + 'T00:00:00').toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'}); } catch (_) {}
-      return '<div class="occ-row"><div class="occ-date"><strong>' + escapeHTML(d) + '</strong><small>' + occWhen(o.days_left) + '</small></div>' +
-        '<div class="occ-main"><strong>' + escapeHTML(o.name) + '</strong><small>' + escapeHTML(o.category) + ' · ' + escapeHTML(o.tone) + ' tone</small></div>' +
-        '<span class="draft-chip ' + s[1] + '">' + escapeHTML(s[0]) + '</span></div>';
-    }).join('') : '<div class="empty-state"><strong>Nothing coming up</strong><p>No occasions match your rules in the next 45 days.</p></div>';
+      let mon = '', day = '';
+      try { const dt = new Date(o.date + 'T00:00:00'); mon = dt.toLocaleDateString(undefined, {month: 'short'}); day = dt.getDate(); } catch (_) {}
+      return '<div class="occ-row" title="' + escapeHTML(o.tone) + ' tone"><div class="cal"><span>' + escapeHTML(mon) + '</span><b>' + escapeHTML(day) + '</b></div>' +
+        '<div class="occ-main"><strong>' + escapeHTML(o.name) + '</strong><small>' + occWhen(o.days_left) + ', ' + escapeHTML(o.category) + '</small></div>' +
+        '<span class="chip ' + s[1] + '">' + escapeHTML(s[0]) + '</span></div>';
+    }).join('') : '<div class="empty"><strong>Nothing coming up</strong><p>No occasions match your rules in the next 45 days.</p></div>';
     $('occPersonal').innerHTML = p.personal.length ? p.personal.map((x, i) =>
       '<div class="occ-row"><div class="occ-main"><strong>' + escapeHTML(x.name) + '</strong><small>' + MONTHS[x.month - 1] + ' ' + x.day + ', every year</small></div>' +
-      '<button class="mini-action delete" data-occdel="' + i + '">Remove</button></div>').join('') : '';
+      '<button class="mini-action" data-occdel="' + i + '">Remove</button></div>').join('') : '';
     $('occPersonal').querySelectorAll('[data-occdel]').forEach(b => b.addEventListener('click', () =>
       saveOccasions({personal: p.personal.filter((_, i) => i !== Number(b.dataset.occdel))})));
   }
@@ -358,14 +392,7 @@
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));
   $('mediaSort').addEventListener('change', renderMedia);
 
-  function initDate() {
-    const n = new Date();
-    $('dateText').textContent = n.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
-    $('todayLabel').textContent = n.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}).toUpperCase();
-  }
-
   async function boot() {
-    initDate();
     await loadMe();
     await loadState();
     const hash = (location.hash || '#dashboard').slice(1);
