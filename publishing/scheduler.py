@@ -248,7 +248,7 @@ class Worker:
                                       "expires. /queue to see it, /cancel to stop it.")
 
     def _auto_collage(self):
-        """Autopilot collage Stories: enqueue `collage_story` media jobs and queue finished collages."""
+        """Autopilot collages: enqueue `collage_story` media jobs (each randomly a Story OR a Post) and queue finished ones."""
         from story_engine.collage import collage_auto
         if not collage_auto.enabled():
             logger.info("collage autopilot: COLLAGE_AUTO is off")
@@ -260,16 +260,16 @@ class Worker:
             acct = self.accounts.get_for(principal)
             why = None
             if s["paused"]: why = "autopilot is paused"
-            elif "story" not in s["formats"]: why = "Story format is not allowed in autopilot"
+            elif not ({"story", "photo"} & set(s["formats"])): why = "neither Story nor Photo format is allowed in autopilot"
             elif not acct: why = "no Instagram account connected"
             elif acct.get("status") != "active": why = f"Instagram status is {acct.get('status')!r}, not 'active'"
             if why:
                 logger.info("collage autopilot: skip %s: %s", principal.owner_id, why)
                 continue
-            done = collage_auto.tick(self.story_db, self.service, principal, now=self.clock())
+            done = collage_auto.tick(self.story_db, self.service, principal, now=self.clock(), formats=s["formats"])
             logger.info("collage autopilot: %s -> %s", principal.owner_id, done)
             if done["queued"]:
-                self._tell(principal, "\U0001F5BC\uFE0F Photo collage Story queued automatically. It goes out when your "
+                self._tell(principal, "\U0001F5BC\uFE0F Photo collage queued automatically (as a Story or a Post). It goes out when your "
                                       "autopilot rules allow. /queue to see it, /cancel to stop it.")
 
     # ---- AI comment engagement -------------------------------------------
