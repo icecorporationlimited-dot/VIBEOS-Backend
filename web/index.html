@@ -1,46 +1,173 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#fff8fc"><title>VIBEOS — Creator Studio</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0A0E" media="(prefers-color-scheme: dark)">
+<title>vibeos: your feed on autopilot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-5-5L5 21"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h7.5M16.5 6H20M4 12h3.5M12.5 12H20M4 18h9.5M18.5 18H20"/><circle cx="14" cy="6" r="2.5"/><circle cx="10" cy="12" r="2.5"/><circle cx="16" cy="18" r="2.5"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-retry" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v4h-4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-insta" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".6"/></symbol>
+</svg>
+
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="#dashboard"><span class="brand-mark"><i></i><i></i><i></i></span><span>vibeos<span class="brand-dot">.</span><small>CREATOR STUDIO</small></span></a>
-    <div class="workspace"><div class="workspace-avatar">V</div><div><strong>My workspace</strong><small>Creator account</small></div><span class="chevron">⌄</span></div>
-    <p class="nav-label">WORKSPACE</p>
-    <nav class="nav-list" aria-label="Main navigation">
-      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">◫</span> Overview</button>
-      <button class="nav-item" data-view="media"><span class="nav-icon">▧</span> Media library <span class="nav-count" id="mediaCount">0</span></button>
-      <button class="nav-item" data-view="occasions"><span class="nav-icon">✦</span> Occasions</button>
-      <button class="nav-item" data-view="notifications"><span class="nav-icon">♧</span> Activity</button>
+    <a class="brand" href="#dashboard" data-view="dashboard"><span class="ring brand-ring"><i class="av"></i></span>vibeos</a>
+    <nav class="nav" aria-label="Main navigation">
+      <button class="nav-item active" data-view="dashboard"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="nav-item" data-view="media"><svg class="ic"><use href="#i-image"/></svg><span>Library</span><em class="count" id="mediaCount">0</em></button>
+      <button class="nav-item" data-view="occasions"><svg class="ic"><use href="#i-calendar"/></svg><span>Occasions</span></button>
+      <button class="nav-item" data-view="notifications"><svg class="ic"><use href="#i-heart"/></svg><span>Activity</span></button>
+      <button class="nav-item" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
     </nav>
-    <p class="nav-label nav-label-spaced">PREFERENCES</p>
-    <nav class="nav-list"><button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Settings</button></nav>
-    <div class="sidebar-bottom"><div class="help-card"><span class="help-spark">✦</span><strong>Creator tip</strong><p>Turn Autopilot on and keep adding photos: VIBEOS edits, captions and schedules them for you.</p><button id="tipButton">Got it <span>↗</span></button></div><div class="user-mini"><div class="user-avatar" id="userAvatar">?</div><div><strong id="userName">Guest</strong><small id="userSub">Not signed in</small></div><button class="dots" aria-label="User menu">···</button></div></div>
+    <button class="btn side-add" id="sideAdd"><svg class="ic"><use href="#i-plus"/></svg>Add photos</button>
+    <div class="side-bottom">
+      <div class="tip"><strong>Quick tip</strong><p>Keep autopilot on and keep dropping photos. We edit, caption and schedule them.</p><button id="tipButton">Got it</button></div>
+      <div class="me"><span class="ring sm ig"><span class="av" id="userAvatar">?</span></span><div><strong id="userName">Guest</strong><small id="userSub">Not signed in</small></div></div>
+    </div>
   </aside>
-  <main class="main-area">
-    <header class="topbar"><button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button><div class="breadcrumbs"><span>Workspace</span><b>/</b><strong id="crumbTitle">Overview</strong></div><div class="top-actions"><span class="today-label" id="todayLabel">CREATOR STUDIO</span><button class="icon-button" data-view="notifications" aria-label="Activity">♧<i></i></button><button class="primary-button top-create" id="topUpload"><span>＋</span> Add content</button></div></header>
-    <section class="view active" id="view-dashboard">
-      <div class="welcome-row"><div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR CREATOR SPACE</div><h1>Make room for <span class="gradient-text">good content.</span></h1><p class="subhead">Your content, your schedule, your vibe — all in one place.</p></div><div class="date-chip"><span>✦</span><div><small>YOUR STUDIO</small><strong id="dateText">Let’s create</strong></div></div></div>
-      <div class="connect-banner"><div class="connect-illustration"><div class="ig-orbit">◎</div><span class="orbit-star star-a">✦</span><span class="orbit-star star-b">✳</span></div><div class="connect-copy"><span class="pill pill-pink">ONE-TIME SETUP</span><h2>Bring your Instagram to VIBEOS</h2><p id="connectCopy">Sign in, then connect your own Instagram professional account.</p></div><div class="connect-action"><span class="connection-status" id="connectionStatus"><i></i> Checking…</span><a class="primary-button" id="connectButton" href="#">Connect Instagram <span>↗</span></a><small>Secure Meta sign-in</small></div></div>
-      <div class="notice-bar" id="engineNotice" hidden><span>ⓘ</span><div><strong>Auto-posting is not active yet</strong><p>Your photos are saved, edited and made ready. Posting to Instagram starts once the hosted posting engine is switched on for web accounts.</p></div></div>
-      <div class="section-heading"><div><h2>Your overview</h2><p>A little snapshot of your creator workflow.</p></div><button class="text-button" data-view="media">Open media library <span>→</span></button></div>
-      <div class="stats-grid"><article class="stat-card stat-lilac"><div class="stat-top"><span>Media in library</span><span class="stat-icon">▧</span></div><div class="stat-number" id="statMedia">0</div><div class="stat-foot"><span class="stat-dot"></span> Stored securely in your VIBEOS buffer</div><div class="stat-art art-lilac">▧</div></article><article class="stat-card stat-peach"><div class="stat-top"><span>Scheduled to post</span><span class="stat-icon">◷</span></div><div class="stat-number" id="statQueue">0</div><div class="stat-foot"><span class="stat-dot orange"></span> <span id="statQueueFoot">Autopilot picks the times</span></div><div class="stat-art art-peach">◷</div></article><article class="stat-card stat-mint"><div class="stat-top"><span>Published</span><span class="stat-icon">✓</span></div><div class="stat-number" id="statPosted">0</div><div class="stat-foot">Posted by VIBEOS to Instagram</div><div class="stat-art art-mint">✳</div></article><article class="stat-card stat-blue"><div class="stat-top"><span>Automation</span><span class="stat-icon">✦</span></div><div class="stat-number stat-word" id="autoStat">Off</div><div class="stat-foot" id="autoFoot">Switch it on in Autopilot</div><div class="stat-art art-blue">✦</div></article></div>
-      <div class="dashboard-columns"><section class="panel recent-panel"><div class="panel-heading"><div><h3>Recently added</h3><p>Your latest creative assets</p></div><button class="round-arrow" data-view="media" aria-label="View media">↗</button></div><div id="recentMedia" class="recent-media empty-state"><div class="empty-icon">▧</div><strong>Your next great post starts here</strong><p>Upload photos to start building your media library.</p><button class="soft-button" id="emptyUpload">＋ Add photos</button></div></section><section class="panel queue-panel"><div class="panel-heading"><div><h3>Autopilot</h3><p>Photos in, posts out</p></div><label class="switch"><input type="checkbox" id="autopilotToggleDash"><span></span></label></div><div id="autopilotStatus" class="queue-list"></div><div class="settings-row"><div><strong>Posts per day</strong><small>Maximum Autopilot will publish</small></div><select id="dailyLimitDash" aria-label="Posts per day"></select></div><div class="panel-bottom-note"><span class="info-icon">i</span> <span id="autopilotNote">Add photos and VIBEOS handles edits, captions and timing.</span></div></section></div>
-      <div class="footer-note"><span>✦</span> Made for your next big idea. <span class="footer-right">VIBEOS <b>·</b> CREATOR STUDIO</span></div>
-    </section>
-    <section class="view" id="view-media"><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR CONTENT VAULT</div><h1>Media <span class="gradient-text">library.</span></h1><p class="subhead">Keep your creative assets together and ready for the next post.</p></div><button class="primary-button" id="mediaUpload">＋ Upload photos</button></div><div class="notice-bar"><span>ⓘ</span><div><strong>Photos upload straight to your VIBEOS buffer</strong><p>No manual queue. With Autopilot on, each photo is edited, captioned and scheduled automatically. With it off, photos wait safely in the buffer.</p></div></div><div class="media-toolbar"><div class="filter-tabs"><button class="filter-tab active" data-filter="all">All media <span id="allCount">0</span></button><button class="filter-tab" data-filter="ready">Ready</button><button class="filter-tab" data-filter="scheduled">Scheduled</button><button class="filter-tab" data-filter="posted">Posted</button></div><div class="toolbar-right"><span id="mediaSummary">0 items</span><select id="mediaSort" aria-label="Sort media"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div></div><div id="mediaGrid" class="media-grid"><div class="empty-large"><div class="empty-icon big">▧</div><h3>Your library is waiting for its first upload</h3><p>Add a few photos and start planning your content.</p><button class="primary-button" id="emptyMediaUpload">＋ Upload photos</button></div></div></section>
-    <section class="view" id="view-occasions"><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> CONTEXT ENGINE</div><h1>Festivals &amp; <span class="gradient-text">occasions.</span></h1><p class="subhead">VIBEOS watches the calendar, matches your photos to the right moment and posts at the best time. Nothing to pick.</p></div></div><div class="notice-bar" id="occCalendarWarn" hidden><span>ⓘ</span><div><strong>Festival dates need a refresh</strong><p id="occCalendarWarnText"></p></div></div><div class="occ-layout"><section class="panel"><div class="panel-heading"><div><h3>Coming up</h3><p>Next 45 days, filtered by your rules</p></div></div><div id="occList" class="occ-list"></div></section><section class="panel settings-panel"><div class="settings-section-title"><div class="settings-icon purple">✦</div><div><h3>Your rules</h3><p>Saved to your account</p></div></div><div class="settings-row"><div><strong>Occasion engine</strong><small>Match photos to festivals and days</small></div><label class="switch"><input type="checkbox" id="occEnabled"><span></span></label></div><div class="settings-row"><div><strong>Auto greeting</strong><small>No matching photo? Post your best-fitting one with a greeting</small></div><label class="switch"><input type="checkbox" id="occGreeting"><span></span></label></div><div class="settings-row"><div><strong>How many occasions</strong><small>Higher means only the big ones</small></div><select id="occPriority" aria-label="Occasion importance"><option value="85">Only major</option><option value="70">Balanced</option><option value="50">Everything</option></select></div><div class="settings-row"><div><strong>Serious days</strong><small>Remembrance and awareness days</small></div><select id="occSolemn" aria-label="Serious days"><option value="respectful">Calm, respectful tone</option><option value="skip">Skip them</option></select></div><div class="settings-row occ-cats"><div><strong>Types</strong><small>What VIBEOS may plan around</small></div><div id="occCats"></div></div><div class="settings-section-title occ-personal-title"><div><h3>Personal dates</h3><p>Birthday, anniversary, launch day. They repeat every year.</p></div></div><div id="occPersonal"></div><div class="occ-add"><input type="text" id="occName" maxlength="40" placeholder="Name (e.g. My birthday)" aria-label="Personal date name"><select id="occMonth" aria-label="Month"></select><select id="occDay" aria-label="Day"></select><button class="outline-button" id="occAdd">Add</button></div></section></div></section>
-    <section class="view" id="view-notifications"><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> ACTIVITY FEED</div><h1>Your <span class="gradient-text">activity.</span></h1><p class="subhead">Recent posts and scheduling events from your Instagram account.</p></div></div><div class="notice-bar"><span>ⓘ</span><div><strong>Live from your account</strong><p>Posted, scheduled and failed posts appear here.</p></div></div><div id="notificationList" class="notification-list"></div></section>
-    <section class="view" id="view-settings"><div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> MAKE IT YOURS</div><h1>Studio <span class="gradient-text">settings.</span></h1><p class="subhead">Choose how your VIBEOS workspace behaves.</p></div></div><div class="settings-layout"><div class="panel settings-panel"><div class="settings-section-title"><div class="settings-icon pink">◎</div><div><h3>Instagram account</h3><p>Link your professional account securely.</p></div></div><div class="settings-row"><div><strong>Instagram connection</strong><small>Each signed-in user connects their own Instagram account.</small></div><a class="outline-button" id="settingsConnect" href="#">Connect account ↗</a></div><div class="settings-row"><div><strong>Account status</strong><small id="igStatusText">Not verified from this dashboard yet.</small></div><span class="status-chip neutral">Not checked</span></div></div><div class="panel settings-panel"><div class="settings-section-title"><div class="settings-icon purple">✦</div><div><h3>Autopilot</h3><p>Saved to your account and used by the hosted worker.</p></div></div><div class="settings-row"><div><strong>Autopilot</strong><small>Edit, caption and schedule new photos automatically</small></div><label class="switch"><input type="checkbox" id="autopilotToggle"><span></span></label></div><div class="settings-row"><div><strong>Posts per day</strong><small>Daily limit across stories and posts</small></div><select id="dailyLimit" aria-label="Posts per day"></select></div><div class="settings-row"><div><strong>Posting times</strong><small>Local times, comma separated (e.g. 12:30, 19:30)</small></div><input type="text" id="slotsInput" autocomplete="off" maxlength="60" aria-label="Posting times"></div><div class="settings-row"><div><strong>Quiet hours</strong><small>No posting between these hours</small></div><div><select id="quietStart" aria-label="Quiet from"></select> – <select id="quietEnd" aria-label="Quiet until"></select></div></div><div class="settings-row"><div><strong>Reels</strong><small>Turn 4+ good photos from one upload into a Reel</small></div><label class="switch"><input type="checkbox" id="reelsToggle"><span></span></label></div><div class="settings-row"><div><strong>Trend Stories</strong><small>One safe, sourced trending-topic Story a day</small></div><label class="switch"><input type="checkbox" id="trendToggle"><span></span></label></div><div class="settings-row"><div><strong>Reply to comments</strong><small>AI replies to comments on your own posts</small></div><label class="switch"><input type="checkbox" id="repliesToggle"><span></span></label></div><div class="settings-row"><div><strong>First comment</strong><small>AI adds a starter comment to new posts</small></div><label class="switch"><input type="checkbox" id="commentsToggle"><span></span></label></div><div class="settings-row"><div><strong>Time zone</strong><small id="tzText">Detected from your device</small></div><button class="outline-button" id="saveAutopilot">Save settings</button></div></div></div></section>
+
+  <main class="main">
+    <header class="topbar">
+      <a class="brand" href="#dashboard" data-view="dashboard"><span class="ring brand-ring"><i class="av"></i></span>vibeos</a>
+      <button class="avatar-btn" data-view="settings" aria-label="Settings"><span class="ring sm ig"><span class="av" id="topAvatar">?</span></span></button>
+    </header>
+
+    <div class="page">
+      <section class="view active" id="view-dashboard">
+        <div class="hero">
+          <span class="ring xl ig"><span class="av" id="heroAvatar">?</span></span>
+          <div class="hero-copy"><h1 id="heroTitle">Drop the pics. We’ll handle the posting.</h1><p id="heroSub">Sign in, link your Instagram, and autopilot does the rest.</p></div>
+          <button class="btn" id="heroAdd"><svg class="ic"><use href="#i-plus"/></svg>Add photos</button>
+        </div>
+
+        <section class="link-card" id="connectCard" data-state="off">
+          <span class="link-ico"><svg class="ic"><use href="#i-insta"/></svg></span>
+          <div class="link-copy"><h2 id="connectTitle">Link your Instagram</h2><p id="connectCopy">Sign in, then connect your own Instagram professional account.</p></div>
+          <div class="link-act"><span class="status" id="connectionStatus"><i></i>Checking…</span><a class="btn" id="connectButton" href="#">Connect Instagram</a><small>Secure Meta sign-in</small></div>
+        </section>
+
+        <div class="notice" id="engineNotice" hidden><svg class="ic"><use href="#i-alert"/></svg><div><strong>Posting isn’t switched on yet</strong><p>Your photos are saved, edited and ready. Posting to Instagram starts once the hosted posting engine is on for web accounts.</p></div></div>
+
+        <div class="stats">
+          <div class="stat"><b id="statMedia">0</b><span>photos</span><small>safe in your buffer</small></div>
+          <div class="stat"><b id="statQueue">0</b><span>lined up</span><small id="statQueueFoot">Autopilot picks the times</small></div>
+          <div class="stat"><b id="statPosted">0</b><span>posted</span><small>live on Instagram</small></div>
+          <div class="stat"><b class="word" id="autoStat">Off</b><span>autopilot</span><small id="autoFoot">Switch it on below</small></div>
+        </div>
+
+        <div class="cols">
+          <section class="panel">
+            <div class="panel-head"><div><h2>Recently added</h2><p>Your latest uploads</p></div><button class="link-btn" data-view="media">See all</button></div>
+            <div id="recentMedia" class="empty"><span class="empty-ic"><svg class="ic"><use href="#i-image"/></svg></span><strong>Nothing here yet</strong><p>Add a few photos and they’ll show up here.</p><button class="btn ghost sm" id="emptyUpload">Add photos</button></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h2>Autopilot</h2><p>Photos in, posts out</p></div><label class="switch"><input type="checkbox" id="autopilotToggleDash" aria-label="Autopilot"><span></span></label></div>
+            <div id="autopilotStatus" class="lines"></div>
+            <div class="row"><div><strong>Posts per day</strong><small>The most autopilot will publish</small></div><select id="dailyLimitDash" aria-label="Posts per day"></select></div>
+            <p class="note"><svg class="ic"><use href="#i-info"/></svg><span id="autopilotNote">Add photos and VIBEOS handles edits, captions and timing.</span></p>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-media">
+        <div class="page-head"><div><h1>Your library</h1><p>Everything you’ve uploaded. Autopilot picks from here.</p></div><button class="btn" id="mediaUpload"><svg class="ic"><use href="#i-plus"/></svg>Add photos</button></div>
+        <div class="notice calm"><svg class="ic"><use href="#i-info"/></svg><div><p>Photos go straight to your buffer. With autopilot on, each one gets edited, captioned and scheduled. With it off, they wait here.</p></div></div>
+        <div class="toolbar">
+          <div class="filters">
+            <button class="filter active" data-filter="all">All <span id="allCount">0</span></button>
+            <button class="filter" data-filter="ready">Ready</button>
+            <button class="filter" data-filter="scheduled">Scheduled</button>
+            <button class="filter" data-filter="posted">Posted</button>
+          </div>
+          <div class="toolbar-right"><span id="mediaSummary">0 items</span><select id="mediaSort" aria-label="Sort media"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div>
+        </div>
+        <div id="mediaGrid" class="media-grid"><div class="empty big"><span class="empty-ic"><svg class="ic"><use href="#i-image"/></svg></span><h3>No photos yet</h3><p>Add some and autopilot takes it from there.</p><button class="btn" id="emptyMediaUpload">Add photos</button></div></div>
+      </section>
+
+      <section class="view" id="view-occasions">
+        <div class="page-head"><div><h1>Occasions</h1><p>VIBEOS watches the calendar, matches your pics to the moment and posts at the right time. Nothing to pick.</p></div></div>
+        <div class="notice" id="occCalendarWarn" hidden><svg class="ic"><use href="#i-alert"/></svg><div><strong>Festival dates need a refresh</strong><p id="occCalendarWarnText"></p></div></div>
+        <div class="cols occ-layout">
+          <section class="panel"><div class="panel-head"><div><h2>Coming up</h2><p>Next 45 days, filtered by your rules</p></div></div><div id="occList" class="occ-list"></div></section>
+          <section class="panel">
+            <div class="panel-head"><div><h2>Your rules</h2><p>Saved to your account</p></div></div>
+            <div class="row"><div><strong>Occasion engine</strong><small>Match photos to festivals and days</small></div><label class="switch"><input type="checkbox" id="occEnabled" aria-label="Occasion engine"><span></span></label></div>
+            <div class="row"><div><strong>Auto greeting</strong><small>No matching photo? Post your best fit with a greeting</small></div><label class="switch"><input type="checkbox" id="occGreeting" aria-label="Auto greeting"><span></span></label></div>
+            <div class="row"><div><strong>How many occasions</strong><small>Higher means only the big ones</small></div><select id="occPriority" aria-label="Occasion importance"><option value="85">Only major</option><option value="70">Balanced</option><option value="50">Everything</option></select></div>
+            <div class="row"><div><strong>Serious days</strong><small>Remembrance and awareness days</small></div><select id="occSolemn" aria-label="Serious days"><option value="respectful">Calm, respectful tone</option><option value="skip">Skip them</option></select></div>
+            <div class="row stack"><div><strong>Types</strong><small>What VIBEOS may plan around</small></div><div id="occCats" class="cats"></div></div>
+            <div class="row stack"><div><strong>Personal dates</strong><small>Birthday, anniversary, launch day. They repeat every year.</small></div><div id="occPersonal"></div>
+              <div class="occ-add"><input type="text" id="occName" maxlength="40" placeholder="Name, e.g. My birthday" aria-label="Personal date name"><select id="occMonth" aria-label="Month"></select><select id="occDay" aria-label="Day"></select><button class="btn ghost sm" id="occAdd">Add</button></div></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-notifications">
+        <div class="page-head"><div><h1>Activity</h1><p>What got posted, what’s lined up, and what went wrong.</p></div></div>
+        <div id="notificationList" class="acts"></div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-head"><div><h1>Settings</h1><p>Set up how autopilot behaves.</p></div></div>
+        <div class="settings-layout">
+          <section class="panel">
+            <div class="panel-head"><div><h2>Instagram</h2><p>Link your professional account securely.</p></div><span class="chip chip-waiting" id="igStatusChip">Not linked</span></div>
+            <div class="row"><div><strong>Connection</strong><small>Everyone connects their own account.</small></div><a class="btn ghost sm" id="settingsConnect" href="#">Connect Instagram</a></div>
+            <div class="row"><div><strong>Status</strong><small id="igStatusText">Not verified from this dashboard yet.</small></div></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h2>Autopilot</h2><p>Saved to your account and used by the hosted worker.</p></div></div>
+            <div class="row"><div><strong>Autopilot</strong><small>Edit, caption and schedule new photos automatically</small></div><label class="switch"><input type="checkbox" id="autopilotToggle" aria-label="Autopilot"><span></span></label></div>
+            <div class="row"><div><strong>Posts per day</strong><small>Daily limit across stories and posts</small></div><select id="dailyLimit" aria-label="Posts per day"></select></div>
+            <div class="row"><div><strong>Posting times</strong><small>Your local time, comma separated, like 12:30, 19:30</small></div><input type="text" id="slotsInput" autocomplete="off" maxlength="60" aria-label="Posting times"></div>
+            <div class="row"><div><strong>Quiet hours</strong><small>No posting in this window</small></div><div class="pair"><select id="quietStart" aria-label="Quiet from"></select><span>to</span><select id="quietEnd" aria-label="Quiet until"></select></div></div>
+            <div class="row"><div><strong>Reels</strong><small>Turn 4+ good photos from one upload into a Reel</small></div><label class="switch"><input type="checkbox" id="reelsToggle" aria-label="Reels"><span></span></label></div>
+            <div class="row"><div><strong>Trend Stories</strong><small>One safe, sourced trending-topic Story a day</small></div><label class="switch"><input type="checkbox" id="trendToggle" aria-label="Trend Stories"><span></span></label></div>
+            <div class="row"><div><strong>Reply to comments</strong><small>AI replies to comments on your own posts</small></div><label class="switch"><input type="checkbox" id="repliesToggle" aria-label="Reply to comments"><span></span></label></div>
+            <div class="row"><div><strong>First comment</strong><small>AI adds a starter comment to new posts</small></div><label class="switch"><input type="checkbox" id="commentsToggle" aria-label="First comment"><span></span></label></div>
+            <div class="row"><div><strong>Time zone</strong><small id="tzText">Detected from your device</small></div><button class="btn sm" id="saveAutopilot">Save settings</button></div>
+          </section>
+        </div>
+      </section>
+    </div>
   </main>
 </div>
+
+<nav class="tabbar" aria-label="Main navigation">
+  <button class="tab-item active" data-view="dashboard" aria-label="Home"><svg class="ic"><use href="#i-home"/></svg></button>
+  <button class="tab-item" data-view="media" aria-label="Library"><svg class="ic"><use href="#i-image"/></svg></button>
+  <button class="tab-add" id="tabAdd" aria-label="Add photos"><svg class="ic"><use href="#i-plus"/></svg></button>
+  <button class="tab-item" data-view="occasions" aria-label="Occasions"><svg class="ic"><use href="#i-calendar"/></svg></button>
+  <button class="tab-item" data-view="notifications" aria-label="Activity"><svg class="ic"><use href="#i-heart"/></svg></button>
+</nav>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input id="filePicker" type="file" accept="image/*" multiple hidden>
 <script src="config.js"></script><script src="app.js"></script>
-</body></html>
+</body>
+</html>
