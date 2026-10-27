@@ -40,7 +40,7 @@ MAX_LIST = 200
 # Settings the browser may change (everything else is rejected, not ignored).
 AUTOPILOT_FIELDS = ("enabled", "paused", "daily_limit", "slots",
                     "quiet_start", "quiet_end", "min_gap_minutes", "timezone",
-                    "auto_replies", "auto_comments", "trend_stories", "formats")
+                    "auto_replies", "auto_comments", "trend_stories", "formats", "vibe")
 
 REJECT_LABELS = {
     "duplicate_of_used": "Already posted a similar photo",
@@ -192,6 +192,7 @@ class WebStudio:
                 "auto_replies": bool(settings.get("auto_replies")),
                 "auto_comments": bool(settings.get("auto_comments")),
                 "trend_stories": settings.get("trend_stories") == "auto",
+                "vibe": str(settings.get("vibe") or "auto"),
                 "reels": "reel" in settings["formats"],
                 "next_post_at": _iso(next_at),
             },
@@ -454,6 +455,73 @@ class WebStudio:
                     self.service.cancel(job["_id"], principal)
         self.buffer.discard(asset_id)                    # -> rejected "discarded_by_user"
         return self.state(cookie_header)
+
+    # ---- story template preview (phone mockup) -------------------------------
+    def story_preview(self, cookie_header, headers, body):
+        """Render a story-engine layout around one of the user's own photos.
+
+        Returns the filled template as standalone HTML the browser can show in
+        a phone-mockup iframe, plus the active layout list so the UI can offer
+        template chips (Diwali / cricket / movie / ...). Nothing is published.
+        """
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        if self.story_db is None:
+            return _err(503, "Story templates are not available.")
+        try:
+            data = json.loads(body or b"{}")
+        except ValueError:
+            return _err(400, "Invalid request.")
+        asset_id = str(data.get("id") or "")
+        layout_id = str(data.get("layout") or "")
+        asset = self._owned_asset(principal, asset_id) if asset_id else None
+        if asset_id and asset is None:
+            return _err(404, "Photo not found.")
+
+        from story_engine import layouts as story_layouts
+        from story_engine.db import LAYOUTS
+        rows = list(self.story_db[LAYOUTS].find({"active": True}))[:40]
+        layouts = [{"id": r["layout_id"],
+                    "description": str(r.get("description") or ""),
+                    "categories": list(r.get("categories") or []),
+                    "special": bool(r.get("special"))}
+                   for r in rows]
+        if not rows:
+            return _err(503, "No story templates are loaded yet.")
+        chosen = next((r for r in rows if r["layout_id"] == layout_id), None) or rows[0]
+
+        # Sample copy: the photo's own caption, else one generic line.
+        caption = str(((asset.get("creative") or {}).get("caption") if asset else "") or "")
+        wanted = [str(l).strip() for l in (data.get("lines") or [caption or "Your photo, on a story."]) if str(l).strip()]
+        lim = ((chosen.get("text_slots") or {}).get("lines")) or {}
+        lines = [l[: int(lim.get("max_chars") or 60)] for l in wanted][: int(lim.get("max_lines") or 3)]
+        if not lines:
+            lines = ["Your photo, on a story."]
+        if asset is not None:
+            variant = "post" if asset.get("status") == "ready" else "original"
+            bg_url = "/web/media/%s/%s" % (asset["_id"], variant)
+            image = {"image_url": self.origin + bg_url}
+        else:
+            image = {}
+        try:
+            page = story_layouts.build_html(chosen, {"image": image, "copy": lines})
+        except Exception:
+            logger.exception("Story preview render failed")
+            return _err(500, "Could not build this preview.")
+        css = ""
+        try:
+            import os
+            css_path = os.path.join(os.path.dirname(story_layouts.__file__),
+                                    os.path.basename(chosen["template_path"]), "style.css")
+            css = open(css_path, encoding="utf-8").read()
+        except Exception:
+            logger.warning("Story preview: could not inline %s css", chosen["layout_id"])
+        doc = ("<!doctype html><html><head><meta charset='utf-8'>"
+               "<meta name=viewport content='width=1080'>"
+               "<style>%s</style></head><body>%s</body></html>" % (css, page))
+        return _json(200, {"ok": True, "layout": chosen["layout_id"],
+                          "layouts": layouts, "html": doc})
 
     # ---- autopilot ----------------------------------------------------------
     def set_autopilot(self, cookie_header, headers, body):

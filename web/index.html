@@ -152,6 +152,14 @@
             <div class="row"><div><strong>Trend Stories</strong><small>One safe, sourced trending-topic Story a day</small></div><label class="switch"><input type="checkbox" id="trendToggle" aria-label="Trend Stories"><span></span></label></div>
             <div class="row"><div><strong>Reply to comments</strong><small>AI replies to comments on your own posts</small></div><label class="switch"><input type="checkbox" id="repliesToggle" aria-label="Reply to comments"><span></span></label></div>
             <div class="row"><div><strong>First comment</strong><small>AI adds a starter comment to new posts</small></div><label class="switch"><input type="checkbox" id="commentsToggle" aria-label="First comment"><span></span></label></div>
+            <div class="row"><div><strong>Caption vibe</strong><small>How your captions should sound</small></div></div>
+            <div class="vibes" id="vibeChips" role="group" aria-label="Caption vibe">
+              <button class="vibe-chip" data-vibe="auto">Auto</button>
+              <button class="vibe-chip" data-vibe="aesthetic">Aesthetic</button>
+              <button class="vibe-chip" data-vibe="desi">Desi</button>
+              <button class="vibe-chip" data-vibe="funny">Funny</button>
+              <button class="vibe-chip" data-vibe="minimal">Minimal</button>
+            </div>
             <div class="row"><div><strong>Time zone</strong><small id="tzText">Detected from your device</small></div><button class="btn sm" id="saveAutopilot">Save settings</button></div>
           </section>
         </div>
@@ -183,9 +191,20 @@
       <div class="sheet-actions">
         <button class="btn" id="sheetPost"><svg class="ic"><use href="#i-bolt"/></svg>Post now</button>
         <button class="btn ghost" id="sheetSkip">Skip</button>
+        <button class="btn ghost" id="sheetStory">Story preview</button>
         <button class="btn ghost sm" id="sheetDelete"><svg class="ic"><use href="#i-trash"/></svg>Delete</button>
       </div>
     </div>
+  </section>
+</div>
+<div class="mockup-wrap" id="mockupWrap" hidden>
+  <div class="sheet-overlay" id="mockupOverlay"></div>
+  <section class="mockup" role="dialog" aria-modal="true" aria-label="Story preview">
+    <button class="sheet-close" id="mockupClose" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    <h3>Story preview</h3>
+    <div class="mockup-chips" id="mockupChips"></div>
+    <div class="phone"><div class="phone-notch"></div><iframe id="mockupFrame" title="Story preview"></iframe></div>
+    <p class="mockup-note">Preview only — your photo in a story template. Nothing is posted.</p>
   </section>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
