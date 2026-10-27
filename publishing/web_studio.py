@@ -48,6 +48,37 @@ REJECT_LABELS = {
     "discarded_by_user": "Discarded",
 }
 
+# Autopilot already judges every photo (media_quality analysis + the AI judge).
+# This only translates the stored analysis into a short badge for the UI tiles.
+SCORE_NOTE_LABELS = {
+    "blurry": ("Blurry", "bad"),
+    "too_dark": ("Too dark", "warn"),
+    "too_bright": ("Washed out", "warn"),
+    "low_contrast": ("Flat light", "warn"),
+    "too_small": ("Low res", "warn"),
+    "blown_highlights": ("Overexposed", "warn"),
+}
+
+
+def _score_badge(asset):
+    """-> (score 0-100 | None, {"label", "tone"} | None) for one library photo."""
+    an = asset.get("analysis") or {}
+    score = an.get("quality_score")
+    if score is None:
+        return None, None
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        return None, None
+    for note, (label, tone) in SCORE_NOTE_LABELS.items():
+        if note in (an.get("notes") or []):
+            return score, {"label": label, "tone": tone}
+    if score >= 70:
+        return score, {"label": "Strong pick", "tone": "ok"}
+    if score >= 45:
+        return score, {"label": "Good", "tone": "info"}
+    return score, {"label": "Weak", "tone": "warn"}
+
 
 def _iso(dt):
     if dt is None:
@@ -157,6 +188,7 @@ class WebStudio:
                 continue
             state, label, when = self._label(a, by_asset.get(a["_id"]), active)
             counts[state if state in counts else "skipped"] += 1
+            badge_score, badge = _score_badge(a)
             media.append({
                 "id": a["_id"], "name": a.get("filename") or "photo",
                 "size": a.get("size_bytes") or 0, "state": state, "label": label,
@@ -164,6 +196,8 @@ class WebStudio:
                 "thumb": "/web/media/%s/%s" % (a["_id"], "post" if a["status"] == "ready" else "original"),
                 "caption": ((a.get("creative") or {}).get("caption") or "")[:2200],
                 "hashtags": list(((a.get("creative") or {}).get("hashtags") or []))[:5],
+                "score": badge_score,
+                "badge": badge,
             })
 
         pending = [j for j in jobs if j["status"] in svc.PENDING]

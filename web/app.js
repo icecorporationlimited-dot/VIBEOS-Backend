@@ -22,6 +22,7 @@
 
   // ------------------------------------------------------------------ helpers
   function toast(msg) {
+    try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}   // light haptic on every notice
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
   }
@@ -111,7 +112,7 @@
   function mediaCard(m) {
     const when = m.when ? dateTimeLabel(m.when) : '';
     const title = m.name + ', ' + sizeLabel(m.size) + ', added ' + dateLabel(m.created_at);
-    return '<article class="mtile" data-media="' + escapeHTML(m.id) + '" title="' + escapeHTML(title) + '"><img loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' +
+    return '<article class="mtile" data-media="' + escapeHTML(m.id) + '" title="' + escapeHTML(title) + '"><img loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' + (m.badge ? '<span class="score-badge tone-' + escapeHTML(m.badge.tone) + '">' + escapeHTML(m.badge.label) + '</span>' : '') +
       '<button class="del" data-delete-media="' + escapeHTML(m.id) + '" aria-label="Delete photo">' + ic('trash') + '</button>' +
       '<div class="mtile-info">' + chip(m) + (when ? '<time>' + escapeHTML(when) + '</time>' : '') + '</div></article>';
   }
@@ -430,6 +431,7 @@
     const id = sheetMedia.id;
     try {
       state = await postJSON(path, {id});
+      if (path === '/web/api/media/post') confetti();
       renderAll(); toast(okMsg); closeSheet();
     } catch (err) { toast(err.message); }
   }
@@ -501,12 +503,64 @@
   $('mockupOverlay').addEventListener('click', closeMockup);
   $('mockupClose').addEventListener('click', closeMockup);
 
+  // ------------------------------------------------------------------ polish
+  // Skeleton loaders: grey shimmer tiles while the first state loads.
+  function showSkeletons() {
+    const grid = document.querySelector('.media-grid');
+    if (!grid) return;
+    grid.innerHTML = Array.from({length: 8}, () =>
+      '<article class="mtile skeleton"><div class="sk-img"></div><div class="sk-line"></div><div class="sk-line short"></div></article>'
+    ).join('');
+  }
+
+  // Pull-to-refresh: drag down from the top on a phone to reload state.
+  const ptr = document.createElement('div');
+  ptr.className = 'ptr';
+  ptr.innerHTML = '<span class="ptr-spinner"></span>';
+  document.body.appendChild(ptr);
+  let ptrStartY = null, ptrPull = 0;
+  document.addEventListener('touchstart', e => {
+    ptrStartY = (window.scrollY <= 0) ? e.touches[0].clientY : null;
+  }, {passive: true});
+  document.addEventListener('touchmove', e => {
+    if (ptrStartY === null) return;
+    ptrPull = Math.max(0, e.touches[0].clientY - ptrStartY);
+    ptr.style.transform = 'translate(-50%, ' + Math.min(ptrPull * 0.4, 64) + 'px)';
+    ptr.classList.toggle('show', ptrPull > 12);
+  }, {passive: true});
+  document.addEventListener('touchend', async () => {
+    if (ptrStartY !== null && ptrPull > 80) {
+      ptr.classList.add('spin');
+      try { await loadState(); } catch (err) {}
+    }
+    ptrPull = 0; ptrStartY = null;
+    ptr.classList.remove('show', 'spin');
+    ptr.style.transform = 'translate(-50%, -48px)';
+  });
+
+  // Confetti: a small CSS-only burst when a post goes out.
+  function confetti() {
+    const colors = ['#FEDA75', '#FA7E1E', '#D62976', '#962FBF', '#4F5BD5'];
+    const wrap = document.createElement('div');
+    wrap.className = 'confetti';
+    for (let i = 0; i < 26; i++) {
+      const p = wrap.appendChild(document.createElement('i'));
+      p.style.left = (Math.random() * 100).toFixed(1) + '%';
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = (Math.random() * 0.3).toFixed(2) + 's';
+      p.style.animationDuration = (1.1 + Math.random() * 0.9).toFixed(2) + 's';
+    }
+    document.body.appendChild(wrap);
+    setTimeout(() => wrap.remove(), 2600);
+  }
+
   // ------------------------------------------------------------------- events
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));
   $('mediaSort').addEventListener('change', renderMedia);
 
   async function boot() {
     await loadMe();
+    showSkeletons();
     await loadState();
     const hash = (location.hash || '#dashboard').slice(1);
     if (['dashboard', 'media', 'occasions', 'notifications', 'settings'].includes(hash)) navigate(hash);
