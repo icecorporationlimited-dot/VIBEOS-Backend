@@ -65,6 +65,7 @@ STUDIO_JSON_POST = {"/web/api/autopilot": "set_autopilot", "/web/api/media/delet
                     "/web/api/media/post": "post_now",
                     "/web/api/media/skip": "skip_media",
                     "/web/api/occasions": "set_occasions",
+                    "/web/api/story/preview": "story_preview",
                     "/web/api/story/queue": "queue_story"}
 STUDIO_OCCASIONS = "/web/api/occasions"
 STUDIO_UPLOAD = "/web/api/media"
