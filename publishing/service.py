@@ -336,6 +336,29 @@ class PublishService:
             job["duplicate"] = False
         return job
 
+
+    def publish_now_for(self, principal, asset_id, fmt="photo") -> dict:
+        """Owner-aware "post this one photo right now" (web sessions pass a Principal).
+
+        Same contract as publish_now(): if this photo already has a pending job
+        in this format, that job is promoted to an immediate manual run instead
+        of being left waiting for its slot.
+        """
+        if not isinstance(principal, Principal):
+            raise TypeError("A verified Principal is required.")
+        job = self.enqueue_for(principal, [asset_id], fmt, None, "manual", True)
+        if job.get("duplicate") and job["status"] in (QUEUED, RETRY, HELD):
+            now = self.clock()
+            self.jobs.update_one(
+                _owned_query(principal, {
+                    "_id": job["_id"], "status": {"$in": [QUEUED, RETRY, HELD]}}),
+                {"$set": {"source": "manual", "scheduled_at": None,
+                          "next_attempt_at": now, "policy_override": True,
+                          "hold_reason": None, "notified": None, "updated_at": now}})
+            job = self.jobs.find_one({"_id": job["_id"]})
+            job["duplicate"] = False
+        return job
+
     def cancel(self, job_id, telegram_id):
         """Atomically cancel an eligible job owned by this principal."""
         principal = self._principal(telegram_id)

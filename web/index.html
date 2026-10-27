@@ -73,6 +73,8 @@
 
         <div class="notice" id="engineNotice" hidden><svg class="ic"><use href="#i-alert"/></svg><div><strong>Posting isn’t switched on yet</strong><p>Your photos are saved, edited and ready. Posting to Instagram starts once the hosted posting engine is on for web accounts.</p></div></div>
 
+        <div class="streak" id="streakCard" hidden><span class="fire"><svg class="ic"><use href="#i-bolt"/></svg></span><div><strong id="streakNum"></strong><p id="streakText"></p></div></div>
+
         <div class="stats">
           <div class="stat"><b id="statMedia">0</b><span>photos</span><small>safe in your buffer</small></div>
           <div class="stat"><b id="statQueue">0</b><span>lined up</span><small id="statQueueFoot">Autopilot picks the times</small></div>
@@ -166,6 +168,26 @@
   <button class="tab-item" data-view="notifications" aria-label="Activity"><svg class="ic"><use href="#i-heart"/></svg></button>
 </nav>
 
+<div class="sheet-wrap" id="sheetWrap" hidden>
+  <div class="sheet-overlay" id="sheetOverlay"></div>
+  <section class="sheet" role="dialog" aria-modal="true" aria-label="Photo details">
+    <div class="sheet-grip"></div>
+    <button class="sheet-close" id="sheetClose" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    <div class="sheet-img"><img id="sheetImage" alt="Photo preview"></div>
+    <div class="sheet-body">
+      <div class="sheet-meta"><span id="sheetChip"></span><time id="sheetWhen"></time></div>
+      <label class="sheet-label" for="sheetCaption">Caption</label>
+      <textarea id="sheetCaption" rows="4" maxlength="2200" aria-label="Caption"></textarea>
+      <p class="sheet-tags" id="sheetTags"></p>
+      <button class="link-btn" id="sheetSaveCaption" hidden>Save caption</button>
+      <div class="sheet-actions">
+        <button class="btn" id="sheetPost"><svg class="ic"><use href="#i-bolt"/></svg>Post now</button>
+        <button class="btn ghost" id="sheetSkip">Skip</button>
+        <button class="btn ghost sm" id="sheetDelete"><svg class="ic"><use href="#i-trash"/></svg>Delete</button>
+      </div>
+    </div>
+  </section>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input id="filePicker" type="file" accept="image/*" multiple hidden>
 <script src="config.js"></script><script src="app.js"></script>
