@@ -269,7 +269,7 @@ h1{font:800 clamp(30px,4.4vw,44px)/1.04 var(--display);letter-spacing:-.04em}
 
 /* ---------- story preview mockup ---------- */
 .mockup-wrap{position:fixed;inset:0;z-index:60}
-.mockup{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);width:min(420px,calc(100% - 24px));max-height:calc(100vh - 24px));overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px}
+.mockup{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);width:min(420px,calc(100% - 24px));max-height:calc(100vh - 24px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px}
 .mockup-wrap.open .sheet-overlay{opacity:1}
 .mockup h3{margin:0 0 10px;font:800 18px var(--display)}
 .mockup-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
