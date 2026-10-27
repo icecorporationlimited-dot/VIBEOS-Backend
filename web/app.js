@@ -6,6 +6,9 @@
   //   GET  /web/api/state       photos, counts, autopilot settings, recent posts
   //   POST /web/api/media       upload photos (multipart) straight to the server buffer
   //   POST /web/api/media/delete
+//   POST /web/api/media/caption  save an edited caption (ready photos)
+//   POST /web/api/media/post     post one ready photo right now
+//   POST /web/api/media/skip     skip one photo (cancels its pending job)
   //   POST /web/api/autopilot   switch on/off, daily limit, times, quiet hours, reels, trend stories, comment replies
   const $ = id => document.getElementById(id);
   const escapeHTML = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -96,9 +99,9 @@
   });
 
   async function deleteMedia(id) {
-    if (!confirm('Delete this photo? A post scheduled with it will be cancelled.')) return;
-    try { await postJSON('/web/api/media/delete', {id}); await loadState(); toast('Photo deleted'); }
-    catch (err) { toast(err.message); }
+    if (!confirm('Delete this photo? A post scheduled with it will be cancelled.')) return false;
+    try { await postJSON('/web/api/media/delete', {id}); await loadState(); toast('Photo deleted'); return true; }
+    catch (err) { toast(err.message); return false; }
   }
 
   // ---------------------------------------------------------------- rendering
@@ -107,7 +110,7 @@
   function mediaCard(m) {
     const when = m.when ? dateTimeLabel(m.when) : '';
     const title = m.name + ', ' + sizeLabel(m.size) + ', added ' + dateLabel(m.created_at);
-    return '<article class="mtile" title="' + escapeHTML(title) + '"><img loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' +
+    return '<article class="mtile" data-media="' + escapeHTML(m.id) + '" title="' + escapeHTML(title) + '"><img loading="lazy" src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '">' +
       '<button class="del" data-delete-media="' + escapeHTML(m.id) + '" aria-label="Delete photo">' + ic('trash') + '</button>' +
       '<div class="mtile-info">' + chip(m) + (when ? '<time>' + escapeHTML(when) + '</time>' : '') + '</div></article>';
   }
@@ -123,6 +126,7 @@
     const b = $('emptyMediaUpload2'); if (b) b.addEventListener('click', openPicker);
     document.querySelectorAll('[data-filter]').forEach(t => t.classList.toggle('active', t.dataset.filter === currentFilter));
     document.querySelectorAll('[data-delete-media]').forEach(btn => btn.addEventListener('click', () => deleteMedia(btn.dataset.deleteMedia)));
+    document.querySelectorAll('.mtile[data-media]').forEach(el => el.addEventListener('click', e => { if (e.target.closest('.del')) return; openSheet(el.dataset.media); }));
     $('allCount').textContent = all.length;
     $('mediaSummary').textContent = rows.length + ' item' + (rows.length === 1 ? '' : 's');
   }
@@ -137,7 +141,7 @@
     host.className = 'tiles';
     host.innerHTML = items.map(m => '<button class="tile" title="' + escapeHTML(m.name) + '" data-recent="' + escapeHTML(m.id) + '">' +
       '<img src="' + escapeHTML(m.thumb) + '" alt="' + escapeHTML(m.name) + '" loading="lazy">' + chip(m) + '</button>').join('');
-    host.querySelectorAll('[data-recent]').forEach(b => b.addEventListener('click', () => navigate('media')));
+    host.querySelectorAll('[data-recent]').forEach(b => b.addEventListener('click', () => openSheet(b.dataset.recent)));
   }
 
   function fillSelect(sel, values, label) {
@@ -227,7 +231,7 @@
       '<div class="empty big"><span class="empty-ic">' + ic('heart') + '</span><h3>Quiet for now</h3><p>Posts and schedule updates land here.</p></div>';
   }
 
-  function renderAll() { renderCounts(); renderMedia(); renderRecent(); renderAutopilot(); renderActivity(); renderHero(); schedulePoll(); }
+  function renderAll() { renderCounts(); renderMedia(); renderRecent(); renderAutopilot(); renderActivity(); renderHero(); renderStreak(); schedulePoll(); }
 
   // ------------------------------------------------------------------ account
   function postConnect(csrf) {
@@ -387,6 +391,79 @@
     $('occName').value = '';
     saveOccasions({personal: list});
   });
+
+  // -------------------------------------------------------- photo detail sheet
+  let sheetMedia = null;
+
+  function openSheet(id) {
+    const m = ((state && state.media) || []).find(x => x.id === id);
+    if (!m) return;
+    sheetMedia = m;
+    $('sheetImage').src = m.thumb;
+    $('sheetChip').innerHTML = chip(m);
+    $('sheetWhen').textContent = m.when ? dateTimeLabel(m.when) : 'Time picked by autopilot';
+    const cap = $('sheetCaption');
+    cap.value = m.caption || '';
+    cap.disabled = !(m.state === 'ready' || m.state === 'scheduled');
+    $('sheetTags').textContent = (m.hashtags || []).map(h => '#' + String(h).replace(/^#+/, '')).join(' ');
+    $('sheetSaveCaption').hidden = true;
+    const canPost = !!(state && state.posting_engine) && (m.state === 'ready' || m.state === 'scheduled');
+    $('sheetPost').style.display = canPost ? '' : 'none';
+    $('sheetSkip').style.display = (m.state === 'posted' || m.state === 'skipped') ? 'none' : '';
+    $('sheetWrap').hidden = false;
+    requestAnimationFrame(() => $('sheetWrap').classList.add('open'));
+  }
+
+  function closeSheet() {
+    $('sheetWrap').classList.remove('open');
+    setTimeout(() => { $('sheetWrap').hidden = true; $('sheetImage').src = ''; }, 250);
+    sheetMedia = null;
+  }
+
+  async function sheetAction(path, okMsg) {
+    if (!sheetMedia) return;
+    const id = sheetMedia.id;
+    try {
+      state = await postJSON(path, {id});
+      renderAll(); toast(okMsg); closeSheet();
+    } catch (err) { toast(err.message); }
+  }
+
+  $('sheetOverlay').addEventListener('click', closeSheet);
+  $('sheetClose').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheetWrap').hidden) closeSheet(); });
+  $('sheetCaption').addEventListener('input', () => { $('sheetSaveCaption').hidden = false; });
+  $('sheetSaveCaption').addEventListener('click', async () => {
+    if (!sheetMedia) return;
+    try {
+      state = await postJSON('/web/api/media/caption', {id: sheetMedia.id, caption: $('sheetCaption').value});
+      renderAll(); $('sheetSaveCaption').hidden = true; toast('Caption saved');
+    } catch (err) { toast(err.message); }
+  });
+  $('sheetPost').addEventListener('click', () => sheetAction('/web/api/media/post', 'Posting now. It should be live in a minute.'));
+  $('sheetSkip').addEventListener('click', () => sheetAction('/web/api/media/skip', 'Photo skipped'));
+  $('sheetDelete').addEventListener('click', async () => { if (sheetMedia && await deleteMedia(sheetMedia.id)) closeSheet(); });
+
+  // ------------------------------------------------------------------ streak
+  function computeStreak(days) {
+    const set = new Set(days || []);
+    const d = new Date();
+    if (!set.has(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);   // today not posted yet: count from yesterday
+    let n = 0;
+    while (set.has(d.toISOString().slice(0, 10))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function renderStreak() {
+    const n = computeStreak(state && state.posted_days);
+    const card = $('streakCard');
+    card.hidden = !(me.signed_in && n > 0);
+    if (n > 0) {
+      $('streakNum').textContent = n + '-day streak';
+      $('streakText').textContent = n === 1 ? 'You posted today. Come back tomorrow to keep it going.'
+        : n >= 5 ? 'You have posted ' + n + ' days in a row. Keep it up!' : 'Keep posting daily to grow your streak.';
+    }
+  }
 
   // ------------------------------------------------------------------- events
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));

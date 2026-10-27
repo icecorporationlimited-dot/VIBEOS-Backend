@@ -21,6 +21,10 @@ from email.parser import BytesParser
 from email.policy import default as email_policy
 
 from content_buffer import MediaTooLarge, QuotaExceeded
+
+from .accounts import NotConnected
+from .identity import owner_filter
+from .service import PublishError
 from . import service as svc
 from .web_auth import SESSION_COOKIE
 from .web_routes import CSRF_COOKIE, _cookie_value
@@ -158,7 +162,8 @@ class WebStudio:
                 "size": a.get("size_bytes") or 0, "state": state, "label": label,
                 "when": when, "created_at": _iso(a.get("created_at")),
                 "thumb": "/web/media/%s/%s" % (a["_id"], "post" if a["status"] == "ready" else "original"),
-                "caption": ((a.get("creative") or {}).get("caption") or "")[:300],
+                "caption": ((a.get("creative") or {}).get("caption") or "")[:2200],
+                "hashtags": list(((a.get("creative") or {}).get("hashtags") or []))[:5],
             })
 
         pending = [j for j in jobs if j["status"] in svc.PENDING]
@@ -171,8 +176,11 @@ class WebStudio:
                 account = self.accounts.get_for(principal)
             except Exception:
                 account = None
+        posted_days = sorted({j["published_at"].date().isoformat()
+                              for j in jobs if j.get("published_at")})
         return _json(200, {
             "media": media,
+            "posted_days": posted_days,
             "counts": counts,
             "autopilot": {
                 "active": active,
@@ -365,6 +373,87 @@ class WebStudio:
             logger.exception("Story queue failed")
             return _err(500, "Could not queue this story.")
         return _json(201 if not out["duplicate"] else 200, {"ok": True, **out})
+
+
+    # ---- photo detail sheet: caption edit / post now / skip ------------------
+    def _owned_asset(self, principal, asset_id):
+        return self.buffer.assets.find_one(
+            {"$and": [{"_id": asset_id}, owner_filter(principal)]})
+
+    def media_caption(self, cookie_header, headers, body):
+        """Save an edited caption on a publish-ready photo (hashtags stay as-is)."""
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        try:
+            data = json.loads(body or b"{}")
+            asset_id = str(data.get("id") or "")
+            caption = str(data.get("caption") or "")[:2200].strip()
+        except (ValueError, AttributeError):
+            return _err(400, "Invalid request.")
+        if not asset_id:
+            return _err(400, "Missing photo id.")
+        asset = self._owned_asset(principal, asset_id)
+        if asset is None:
+            return _err(404, "Photo not found.")
+        if asset.get("status") != "ready" or not (asset.get("creative") or {}).get("variants"):
+            return _err(409, "Caption can be edited once the photo is ready.")
+        self.buffer.assets.update_one(
+            {"_id": asset["_id"]},
+            {"$set": {"creative.caption": caption, "updated_at": datetime.now(timezone.utc)}})
+        return self.state(cookie_header)
+
+    def post_now(self, cookie_header, headers, body):
+        """Post one ready photo immediately (promotes its pending job if any)."""
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        if not self.posting_engine or self.service is None:
+            return _err(503, "Posting isn't switched on for web accounts yet.")
+        try:
+            asset_id = str(json.loads(body or b"{}").get("id") or "")
+        except ValueError:
+            return _err(400, "Invalid request.")
+        if not asset_id:
+            return _err(400, "Missing photo id.")
+        asset = self._owned_asset(principal, asset_id)
+        if asset is None:
+            return _err(404, "Photo not found.")
+        if asset.get("status") != "ready":
+            return _err(409, "Only ready photos can be posted.")
+        try:
+            self.service.publish_now_for(principal, asset_id, "photo")
+        except NotConnected as exc:
+            return _err(409, str(exc))
+        except PublishError as exc:
+            return _err(409, str(exc))
+        except Exception:
+            logger.exception("Post now failed")
+            return _err(500, "Could not post this photo right now.")
+        return self.state(cookie_header)
+
+    def skip_media(self, cookie_header, headers, body):
+        """Skip one photo: cancel its pending jobs and mark it discarded."""
+        principal, error = self._authorize_write(cookie_header, headers)
+        if error:
+            return error
+        try:
+            asset_id = str(json.loads(body or b"{}").get("id") or "")
+        except ValueError:
+            return _err(400, "Invalid request.")
+        if not asset_id:
+            return _err(400, "Missing photo id.")
+        asset = self._owned_asset(principal, asset_id)
+        if asset is None:
+            return _err(404, "Photo not found.")
+        if asset.get("status") == "rejected":
+            return self.state(cookie_header)
+        if self.service is not None:                      # drop pending jobs for this photo
+            for job in self.service.jobs_for(principal, 500):
+                if asset_id in (job.get("asset_ids") or []) and job["status"] in svc.PENDING:
+                    self.service.cancel(job["_id"], principal)
+        self.buffer.discard(asset_id)                    # -> rejected "discarded_by_user"
+        return self.state(cookie_header)
 
     # ---- autopilot ----------------------------------------------------------
     def set_autopilot(self, cookie_header, headers, body):
