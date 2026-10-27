@@ -34,9 +34,34 @@ DEFAULTS = {
     "min_gap_minutes": 60,
     "slots": ["12:30", "19:30"],
     "timezone": "",              # IANA name; "" = use the owner's default (web users set it)
+    "vibe": "auto",             # caption vibe preset: auto | aesthetic | desi | funny | minimal
     "occasions": {},             # context engine preferences (context_engine.prefs)
 }
 _SLOT = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+VIBES = ("auto", "aesthetic", "desi", "funny", "minimal")
+# Vibe presets: web chips + /autopilot vibe. Each maps to the caption style +
+# language the copywriter already understands, so the AI writes accordingly.
+VIBE_PRESETS = {
+    "aesthetic": {"caption_style": "soft", "language": "english",
+                  "blurb": "dreamy, minimal, aesthetic captions in English"},
+    "desi": {"caption_style": "natural", "language": "hinglish",
+             "blurb": "casual Hinglish captions — desi creator energy"},
+    "funny": {"caption_style": "funny", "language": "english",
+              "blurb": "witty one-liners with a light punchline"},
+    "minimal": {"caption_style": "clean", "language": "english",
+                "blurb": "short, polished, confident captions"},
+}
+
+
+def vibe_caption_kwargs(settings: dict) -> dict:
+    """Resolve the stored vibe preset into copywriter.build_prompt() kwargs."""
+    preset = VIBE_PRESETS.get(str((settings or {}).get("vibe") or "auto"))
+    if not preset:
+        return {"mode": "natural", "vibe": "natural", "language": "english"}
+    style = preset["caption_style"]
+    return {"mode": style, "vibe": style, "language": preset["language"]}
 
 
 def _now():
@@ -61,6 +86,11 @@ def _clean(field, value):
         if mode not in ("off", "auto"):
             raise ValueError("Trend stories must be: off or auto.")
         return mode
+    if field == "vibe":
+        name = str(value or "").lower().strip()
+        if name not in VIBES:
+            raise ValueError("Vibe must be one of: " + ", ".join(VIBES))
+        return name
     if field == "occasions":
         from context_engine.prefs import clean_prefs
         return clean_prefs(value)
@@ -209,6 +239,7 @@ HELP = (
     "/autopilot slots 12:30 19:30 — preferred times\n"
     "/autopilot formats photo story carousel reel\n"
     "/autopilot trends auto | off — auto-post a Story for safe trending topics\n"
+    "/autopilot vibe desi — caption vibe: auto | aesthetic | desi | funny | minimal\n"
     "/autopilot replies auto | off — AI replies to comments on your own posts\n"
     "/autopilot comments auto | off — AI posts a starter comment on new posts\n"
     "/autopilot block war politics — hold posts with these words\n"
@@ -227,6 +258,7 @@ def describe(s: dict) -> str:
         f"• slots: {', '.join(s['slots'])}\n"
         f"• formats: {', '.join(s['formats'])}\n"
         f"• trend stories: {s['trend_stories']}\n"
+        f"• vibe: {s['vibe']}\n"
         f"• AI comment replies: {'on' if s.get('auto_replies') else 'off'}\n"
         f"• AI starter comments: {'on' if s.get('auto_comments') else 'off'}\n"
         f"• blocked: {', '.join(s['blocked_topics']) or '—'}\n\n"
@@ -266,6 +298,12 @@ def handle_command(store: AutopilotStore, telegram_id, args) -> str:
         if cmd == "slots" and rest:
             s = store.update(telegram_id, slots=rest)
             return "✅ Slots: " + ", ".join(s["slots"])
+        if cmd == "vibe" and len(rest) == 1:
+            s = store.update(telegram_id, vibe=rest[0])
+            preset = VIBE_PRESETS.get(s["vibe"])
+            return ("🎨 Vibe: auto — captions match each photo."
+                    if s["vibe"] == "auto" else
+                    f"🎨 Vibe: {s['vibe']} — {preset['blurb']}")
         if cmd == "trends" and len(rest) == 1 and rest[0].lower() in ("auto", "off"):
             s = store.update(telegram_id, trend_stories=rest[0].lower())
             if s["trend_stories"] == "auto":

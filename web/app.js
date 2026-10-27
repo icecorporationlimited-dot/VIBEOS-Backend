@@ -9,6 +9,7 @@
 //   POST /web/api/media/caption  save an edited caption (ready photos)
 //   POST /web/api/media/post     post one ready photo right now
 //   POST /web/api/media/skip     skip one photo (cancels its pending job)
+//   POST /web/api/story/preview  render a story template around one photo
   //   POST /web/api/autopilot   switch on/off, daily limit, times, quiet hours, reels, trend stories, comment replies
   const $ = id => document.getElementById(id);
   const escapeHTML = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,6 +185,10 @@
       $('repliesToggle').checked = !!ap.auto_replies; $('commentsToggle').checked = !!ap.auto_comments;
     }
     ['reelsToggle', 'trendToggle', 'repliesToggle', 'commentsToggle'].forEach(id => { $(id).disabled = !me.signed_in; });
+    document.querySelectorAll('.vibe-chip').forEach(c => {
+      c.classList.toggle('active', !!ap && c.dataset.vibe === (ap.vibe || 'auto'));
+      c.disabled = !me.signed_in;
+    });
     $('autoStat').textContent = on ? 'On' : 'Off';
     $('autoFoot').textContent = ap ? 'Up to ' + ap.daily_limit + ' post' + (ap.daily_limit === 1 ? '' : 's') + ' a day' : 'Sign in to use autopilot';
 
@@ -464,6 +469,37 @@
         : n >= 5 ? 'You have posted ' + n + ' days in a row. Keep it up!' : 'Keep posting daily to grow your streak.';
     }
   }
+
+  // ------------------------------------------------------------------ vibes
+  document.querySelectorAll('.vibe-chip').forEach(c => c.addEventListener('click', () => {
+    saveAutopilot({vibe: c.dataset.vibe}, 'Vibe set to ' + c.textContent.trim());
+  }));
+
+  // --------------------------------------------------------- story preview
+  async function loadStoryPreview(layoutId) {
+    if (!sheetMedia) { toast('Pick a photo first.'); return; }
+    try {
+      const r = await postJSON('/web/api/story/preview', {id: sheetMedia.id, layout: layoutId || ''});
+      $('mockupChips').innerHTML = r.layouts.map(l => {
+        const cls = 'vibe-chip' + (l.id === r.layout ? ' active' : '');
+        const label = l.description || l.id.replace(/_/g, ' ');
+        return '<button class="' + cls + '" data-layout="' + escapeHTML(l.id) + '">' + escapeHTML(label) + '</button>';
+      }).join('');
+      $('mockupChips').querySelectorAll('[data-layout]').forEach(b => b.addEventListener('click', () => loadStoryPreview(b.dataset.layout)));
+      $('mockupFrame').srcdoc = r.html;
+      $('mockupWrap').hidden = false;
+      requestAnimationFrame(() => $('mockupWrap').classList.add('open'));
+    } catch (err) { toast(err.message); }
+  }
+
+  function closeMockup() {
+    $('mockupWrap').classList.remove('open');
+    setTimeout(() => { $('mockupWrap').hidden = true; $('mockupFrame').srcdoc = ''; }, 250);
+  }
+
+  $('sheetStory').addEventListener('click', () => loadStoryPreview());
+  $('mockupOverlay').addEventListener('click', closeMockup);
+  $('mockupClose').addEventListener('click', closeMockup);
 
   // ------------------------------------------------------------------- events
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));
