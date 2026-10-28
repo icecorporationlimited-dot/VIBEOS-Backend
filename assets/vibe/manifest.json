@@ -1,5 +1,6 @@
 {
   "textures": [
+    "grain_heavy.png",
     "grain_soft.png"
   ],
   "frames": [],
