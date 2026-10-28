@@ -41,8 +41,15 @@ def compose(persona_key, info, caption, recent=(), seed=""):
     if rnd.random() > (p["corner_bias"] if pool else 1.0):
         pool = [pl for pl in free if pl in CENTERED] or free
     placement = rnd.choice(pool)
+    font_override = None
 
     tilt = round(rnd.uniform(*p["tilt"]), 2)
+    if persona_key == "casual_genz" and rnd.random() < 0.35:    # handwritten-note feel
+        font_override = "serif"
+    elif persona_key == "soft_aesthetic" and rnd.random() < 0.30:
+        font_override = "medium"
+    else:
+        font_override = None
     size = rnd.randint(*p["caption_size"])
     scrim = p["scrim"] if info.get("busy", 0.2) > 0.18 else max(40, p["scrim"] - 45)
     sticker = rnd.random() < p["sticker_chance"]
@@ -59,6 +66,7 @@ def compose(persona_key, info, caption, recent=(), seed=""):
     no_text = caption is None or (not caption and bool(doodles))
     signature = f"{persona_key}:{placement}|{size // 8}|{'notext' if no_text else 'text'}|{len(doodles)}"
     return dict(persona=persona_key, mood=info.get("mood"), placement=placement, tilt=tilt,
+                font_override=font_override,
                 size=size, scrim=scrim, sticker=sticker, treatment=treatment,
                 doodles=doodles, caption=caption or "", no_text=no_text,
                 signature=signature, calm_cell=info.get("faces") and None or None)

@@ -104,7 +104,7 @@ def render_story(photo, layout, emoji_px_ratio=1.0):
     if text and not layout.get("no_text"):
         from vibe_engine.personalities import PERSONALITIES
         p = PERSONALITIES[layout["persona"]]
-        font = _font(p["font"], layout["size"])
+        font = _font(layout.get("font_override") or p["font"], layout["size"])
         if p["lowercase"]:
             text = text[0].lower() + text[1:] if p["font"] == "serif" else text.lower()
         lines = _wrap(ImageDraw.Draw(img), text, font, W - 220, 3)
@@ -122,9 +122,12 @@ def render_story(photo, layout, emoji_px_ratio=1.0):
                                 fill=(255, 255, 255, 235))
             fill = (17, 17, 17)
         else:
-            d.rounded_rectangle((x - 24, 46, x + block_w + 24, 54 + block_h), radius=18,
-                                fill=(0, 0, 0, layout.get("scrim", 90)))
+            if layout.get("scrim", 90) >= 110:                   # busy photo: soft contrast box
+                d.rounded_rectangle((x - 24, 46, x + block_w + 24, 54 + block_h), radius=18,
+                                    fill=(0, 0, 0, layout.get("scrim")))
             fill = (255, 255, 255)
+            for line in lines:                                  # else: natural soft shadow
+                d.text((x + 3, 59 + lines.index(line) * line_h + 3), line, font=font, fill=(0, 0, 0, 160))
         ty = 56
         for line in lines:
             d.text((x, ty), line, font=font, fill=fill)
@@ -133,12 +136,20 @@ def render_story(photo, layout, emoji_px_ratio=1.0):
                             fillcolor=(0, 0, 0, 0))
         img.paste(layer, (0, max(0, int(y - 60))), layer)
 
-    for i, emoji in enumerate((layout.get("doodles") or [])[:2]):
-        glyph = _emoji_img(emoji, 120)
+    doodles = (layout.get("doodles") or [])[:2]
+    if layout.get("no_text") and doodles:                       # emoji-row mode: 3 centered on top
+        glyph = _emoji_img(doodles[0], 150)
+        if glyph:
+            for i in range(3):
+                cx = int(W / 2 + (i - 1) * (glyph.width + 70) - glyph.width / 2)
+                img.paste(glyph, (cx, 300), glyph)
+    for i, emoji in enumerate(doodles):                         # else: doodles hug the caption
+        glyph = _emoji_img(emoji, 110)
         if glyph:
             st = glyph.rotate(12 * (i + 1) * (1 if i % 2 == 0 else -1), expand=True,
                               fillcolor=(0, 0, 0, 0))
-            x = int(W * 0.78) - i * 210
-            y = int(H * 0.66) - i * 260
+            ax, ay = PLACEMENTS[layout.get("placement", "bottom_left")]
+            x = int(W * (0.82 if ax is None or ax <= 0.5 else 0.18)) - i * 150
+            y = int(H * max(0.12, ay - 0.16)) - i * 130
             img.paste(st, (x, y), st)
     return img
