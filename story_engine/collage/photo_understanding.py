@@ -38,11 +38,41 @@ def _sharpness(gray):
 # Fallback chain: YuNet face -> rembg mask bounding box -> edge saliency -> default.
 # ----------------------------------------------------------------------------------------------
 YUNET_FILE = "face_detection_yunet_2023mar.onnx"
+YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/" + YUNET_FILE
 _YUNET = {"det": None, "tried": False}
+_YUNET_DL = {"tried": False}          # one auto-download attempt per process (never blocks later retries by hand)
 _YUNET_LOCK = threading.Lock()
 _MIN_FACE_RATIO = float(os.getenv("COLLAGE_MIN_FACE_RATIO", "0.05"))   # drop faces < 5 % of the biggest face's area
 _FACE_SCORE = float(os.getenv("COLLAGE_FACE_SCORE", "0.6"))
 _DEFAULT_BOX = [0.15, 0.05, 0.85, 0.65]
+
+
+def _yunet_download(dest):
+    """Best-effort one-time fetch of the YuNet ONNX (~230 KB) from the official OpenCV Zoo. Never raises.
+    Without this file face detection silently turns off and crops can cut faces, so the worker self-heals."""
+    if _YUNET_DL["tried"]:
+        return False                                            # already tried this process (maybe succeeded)
+    _YUNET_DL["tried"] = True
+    if os.getenv("COLLAGE_YUNET_AUTO_DOWNLOAD", "1").lower() in ("0", "false", "off", "no"):
+        return False
+    try:
+        import requests                                         # already a worker dependency (Groq vision)
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        tmp = dest + ".part"
+        with requests.get(YUNET_URL, timeout=(5, 30), stream=True) as r:
+            r.raise_for_status()
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(64 * 1024):
+                    f.write(chunk)
+        if os.path.getsize(tmp) > 100_000:                      # sanity: real model, not an HTML error page
+            os.replace(tmp, dest)
+            log.info("collage: YuNet model downloaded to %s", dest)
+            return True
+        os.remove(tmp)
+        log.warning("collage: YuNet download too small; discarding (set COLLAGE_YUNET_MODEL)")
+    except Exception as e:
+        log.warning("collage: YuNet auto-download failed (%s); set COLLAGE_YUNET_MODEL", e)
+    return False
 
 
 def _yunet_path():
@@ -52,6 +82,9 @@ def _yunet_path():
     cands += [str(root / "models" / YUNET_FILE), "/app/models/" + YUNET_FILE]
     for c in cands:
         if c and os.path.isfile(c) and os.path.getsize(c) > 100_000:
+            return c
+    for c in cands:                                             # model not shipped: fetch it once (writable dir wins)
+        if c and _yunet_download(c) and os.path.isfile(c) and os.path.getsize(c) > 100_000:
             return c
     return None
 
@@ -68,7 +101,8 @@ def _yunet():
             import cv2
             path = _yunet_path()
             if path is None:
-                log.warning("collage: YuNet model not found (set COLLAGE_YUNET_MODEL); using rembg/saliency fallback")
+                log.warning("collage: YuNet model not found even after auto-download (set COLLAGE_YUNET_MODEL); "
+                        "face detection OFF -> crops may cut faces")
             else:
                 _YUNET["det"] = cv2.FaceDetectorYN.create(path, "", (320, 320), _FACE_SCORE, 0.3, 5000)
         except Exception as e:
