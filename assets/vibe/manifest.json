@@ -1,7 +1,8 @@
 {
   "textures": [
     "grain_heavy.png",
-    "grain_soft.png"
+    "grain_soft.png",
+    "light_leak_warm.png"
   ],
   "frames": [],
   "stickers": []
