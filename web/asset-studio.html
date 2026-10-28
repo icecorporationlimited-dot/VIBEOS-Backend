@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIBEOS · Asset Studio</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0b0a0e; color: #f4f3f7;
+         min-height: 100vh; padding: 32px 16px 64px; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; letter-spacing: -0.5px; }
+  h1 span { color: #a78bfa; }
+  p.sub { color: #9c99a8; margin: 6px 0 20px; font-size: 14px; }
+  .card { background: #161419; border: 1px solid #26222c; border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 9px 14px; border-radius: 999px; border: 1px solid #332e3a; background: #1c1922;
+          color: #cfcad9; font-size: 13px; cursor: pointer; }
+  .chip.on { background: #a78bfa; border-color: #a78bfa; color: #14101d; font-weight: 600; }
+  .key { display: flex; gap: 8px; margin-bottom: 14px; }
+  .key input { flex: 1; background: #161419; border: 1px solid #332e3a; color: #f4f3f7;
+               border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .drop { border: 2px dashed #453d54; border-radius: 16px; padding: 34px 16px; text-align: center;
+          color: #9c99a8; cursor: pointer; transition: border-color .15s; }
+  .drop.hot { border-color: #a78bfa; color: #d9d3ea; }
+  .drop b { color: #e9e5f2; }
+  .file { display: flex; gap: 12px; align-items: center; background: #1c1922; border: 1px solid #332e3a;
+          border-radius: 12px; padding: 10px; margin-top: 10px; }
+  .file img { width: 54px; height: 54px; object-fit: contain; background: #221e29; border-radius: 8px; }
+  .file .meta { flex: 1; min-width: 0; }
+  .file input { width: 100%; background: #14111a; border: 1px solid #332e3a; color: #f4f3f7;
+                border-radius: 8px; padding: 7px 9px; font-size: 13px; }
+  .file small { color: #8b8797; font-size: 11px; }
+  .st { font-size: 11px; padding: 3px 8px; border-radius: 999px; }
+  .st.ok { background: #143c2b; color: #7ee2a8; } .st.bad { background: #4a1f24; color: #ff9aa4; }
+  button.btn { background: #a78bfa; color: #14101d; border: 0; border-radius: 12px; padding: 12px 18px;
+               font-size: 14px; font-weight: 700; cursor: pointer; }
+  button.btn:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; border: 1px solid #332e3a; color: #cfcad9; border-radius: 10px;
+                padding: 6px 10px; font-size: 12px; cursor: pointer; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .list { list-style: none; padding: 0; }
+  .list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 2px;
+             border-bottom: 1px solid #221e29; font-size: 13px; }
+  .list .sz { color: #8b8797; }
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; background: #241f2e;
+           border: 1px solid #3a3350; color: #e9e5f2; padding: 10px 18px; border-radius: 999px;
+           font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>VIBEOS <span>Asset Studio</span></h1>
+  <p class="sub">Upload fonts · stickers · frames · textures straight to the repo. Name likho, upload karo — git ki zaroorat nahi.</p>
+
+  <div class="key">
+    <input id="passcode" type="password" placeholder="Upload passcode (Netlify env me set kiya hua)" autocomplete="off">
+  </div>
+
+  <div class="card">
+    <div class="chips" id="catChips"></div>
+    <div class="chips" id="folderChips" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <b>Click ya drop karo</b> — PNG / JPG / TTF (multi-select allowed)
+      <div style="font-size:12px;color:#777383;margin-top:6px">File ka naam auto snake_case ho jayega (My Star.png → my_star.png)</div>
+    </div>
+    <input id="picker" type="file" multiple hidden>
+    <div id="files"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="uploadBtn" disabled>Upload all</button>
+      <span id="upStatus" style="font-size:12px;color:#8b8797"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b style="font-size:14px">Existing assets</b>
+      <button class="ghost" id="refresh">Refresh</button>
+    </div>
+    <ul class="list" id="existing"></ul>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const CATS = {
+  vibe: ["fonts", "stickers", "frames", "textures"],
+  collage: ["fonts", "papers", "scraps", "stickers", "tapes"],
+};
+let cat = "vibe", folder = "fonts", queue = [];
+
+const $ = (id) => document.getElementById(id);
+const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600); };
+
+$("passcode").value = localStorage.getItem("vibeos_asset_key") || "";
+$("passcode").onchange = (e) => localStorage.setItem("vibeos_asset_key", e.target.value);
+
+function renderChips() {
+  $("catChips").innerHTML = Object.keys(CATS).map((c) =>
+    `<button class="chip ${c === cat ? "on" : ""}" data-c="${c}">${c}</button>`).join("");
+  $("folderChips").innerHTML = CATS[cat].map((f) =>
+    `<button class="chip ${f === folder ? "on" : ""}" data-f="${f}">${f}</button>`).join("");
+  [...$("catChips").children].forEach((b) => b.onclick = () => { cat = b.dataset.c; folder = CATS[cat][0];
+    queue = []; renderChips(); renderFiles(); loadExisting(); });
+  [...$("folderChips").children].forEach((b) => b.onclick = () => { folder = b.dataset.f;
+    renderChips(); loadExisting(); });
+}
+
+function renderFiles() {
+  $("files").innerHTML = queue.map((f, i) => `
+    <div class="file">
+      ${f.url ? `<img src="${f.url}">` : `<img src="" style="display:none">`}
+      <div class="meta">
+        <input value="${f.name}" data-i="${i}">
+        <small>${(f.size / 1024).toFixed(0)} KB · .${f.ext} · ${f.status ? `
+          <span class="st ${f.status === "ok" ? "ok" : "bad"}">${f.status === "ok" ? "uploaded" : f.status}</span>` : ""}</small>
+      </div>
+    </div>`).join("");
+  [...$("files").querySelectorAll("input")].forEach((inp) =>
+    inp.onchange = (e) => { queue[+e.target.dataset.i].name = e.target.value; });
+  $("uploadBtn").disabled = !queue.some((f) => !f.status);
+}
+
+$("drop").onclick = () => $("picker").click();
+$("picker").onchange = (e) => addFiles(e.target.files);
+$("drop").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("hot"); };
+$("drop").ondragleave = () => $("drop").classList.remove("hot");
+$("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("hot"); addFiles(e.dataTransfer.files); };
+
+function snake(n) { return n.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9._-]+/g, "_")
+  .replace(/_+/g, "_").replace(/^_|_$/g, "").slice(0, 80); }
+
+function addFiles(list) {
+  for (const file of list) {
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    queue.push({ name: snake(file.name) || "file", ext, size: file.size, status: "", file });
+    const f = queue[queue.length - 1];
+    if (/^image\//.test(file.type)) { const r = new FileReader();
+      r.onload = () => { f.url = r.result; renderFiles(); }; r.readAsDataURL(file); }
+  }
+  renderFiles();
+}
+
+const api = async (method, body, qs = "") => {
+  const res = await fetch("/api/asset-studio" + qs, {
+    method,
+    headers: { "Content-Type": "application/json", "x-upload-key": $("passcode").value },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+};
+
+$("uploadBtn").onclick = async () => {
+  const todo = queue.map((f, i) => ({ f, i })).filter((x) => !x.f.status);
+  if (!todo.length) return;
+  $("uploadBtn").disabled = true;
+  for (const { f, i } of todo) {
+    $("upStatus").textContent = `uploading ${f.name}...`;
+    try {
+      const data = await new Promise((ok, err) => { const r = new FileReader();
+        r.onload = () => ok(r.result); r.onerror = err; r.readAsDataURL(f.file); });
+      await api("POST", { category: cat, folder, name: f.name, ext: f.ext,
+        data: data.replace(/^data:[^,]+,/, "") });
+      f.status = "ok"; toast(f.name + " uploaded ✓");
+    } catch (e) { f.status = String(e.message).slice(0, 40); }
+    renderFiles();
+  }
+  $("upStatus").textContent = "";
+  $("uploadBtn").disabled = !queue.some((f) => !f.status);
+  loadExisting();
+};
+
+async function loadExisting() {
+  $("existing").innerHTML = "<li><span class=\"sz\">loading…</span></li>";
+  try {
+    const { files } = await api("GET", null, `?category=${cat}&folder=${folder}`);
+    $("existing").innerHTML = files.length
+      ? files.map((f) => `<li><span>${f.name} <span class="sz">(${(f.size / 1024).toFixed(0)} KB)</span></span>
+          <button class="ghost" data-n="${f.name}">delete</button></li>`).join("")
+      : "<li><span class=\"sz\">empty</span></li>";
+    [...$("existing").querySelectorAll("button")].forEach((b) => b.onclick = async () => {
+      if (!confirm(b.dataset.n + " delete karna hai?")) return;
+      try { await api("DELETE", { category: cat, folder, name: b.dataset.n });
+        toast("deleted"); loadExisting(); } catch (e) { toast(e.message); }
+    });
+  } catch (e) { $("existing").innerHTML = `<li><span class="sz">${e.message}</span></li>`; }
+}
+
+$("refresh").onclick = loadExisting;
+renderChips(); loadExisting();
+</script>
+</body>
+</html>

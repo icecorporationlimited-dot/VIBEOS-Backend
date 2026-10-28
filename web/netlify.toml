@@ -1,5 +1,17 @@
 [build]
   publish = "."
+  functions = "netlify/functions"
+
+# Asset Studio: uploader page + its API must be exempted from the catch-all proxy below.
+[[redirects]]
+  from = "/asset-studio"
+  to = "/asset-studio.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/asset-studio"
+  to = "/.netlify/functions/asset-studio"
+  status = 200
 
 # The app now runs from the VIBEOS backend (same origin = working login cookies).
 [[redirects]]
