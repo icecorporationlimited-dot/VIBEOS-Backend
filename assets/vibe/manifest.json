@@ -4,7 +4,8 @@
     "grain_heavy.png",
     "grain_soft.png",
     "light_leak_teal.png",
-    "light_leak_warm.png"
+    "light_leak_warm.png",
+    "vignette_soft.png"
   ],
   "frames": [],
   "stickers": []
