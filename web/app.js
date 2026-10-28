@@ -461,15 +461,42 @@
     return n;
   }
 
-  function renderStreak() {
-    const n = computeStreak(state && state.posted_days);
-    const card = $('streakCard');
-    card.hidden = !(me.signed_in && n > 0);
-    if (n > 0) {
-      $('streakNum').textContent = n + '-day streak';
-      $('streakText').textContent = n === 1 ? 'You posted today. Come back tomorrow to keep it going.'
-        : n >= 5 ? 'You have posted ' + n + ' days in a row. Keep it up!' : 'Keep posting daily to grow your streak.';
+  function bestStreak(days) {
+    // longest run of consecutive posted days across the whole history
+    const set = new Set(days || []);
+    if (!set.size) return 0;
+    const times = [...set].map(s => Date.parse(s + 'T00:00:00Z')).sort((a, b) => a - b);
+    let best = 0, run = 0, prev = null;
+    for (const t of times) {
+      run = (prev !== null && t - prev === 86400000) ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = t;
     }
+    return best;
+  }
+
+  function renderStreak() {
+    const days = (state && state.posted_days) || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const postedToday = days.includes(today);
+    const n = computeStreak(days);
+    const card = $('streakCard');
+    card.hidden = !(me.signed_in && days.length);
+    if (card.hidden) return;
+    const best = bestStreak(days);
+    $('streakNum').textContent = n + (n === 1 ? ' day' : ' days') + ' in a row';
+    $('streakText').textContent = postedToday
+      ? (n >= 5 ? 'On fire! Come back tomorrow to make it ' + (n + 1) + '.' : 'Posted today — streak safe.')
+      : (n > 0 ? 'Post today to make it ' + (n + 1) + ' in a row.' : 'Post today to start a new streak.');
+    $('streakBest').textContent = best;
+    const dots = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dots.push('<span class="dot' + (days.includes(key) ? ' on' : '') + (i === 0 ? ' today' : '') + '" title="' + key + '"></span>');
+    }
+    $('streakWeek').innerHTML = dots.join('');
+    card.classList.toggle('hot', postedToday && n >= 3);
   }
 
   // ------------------------------------------------------------------ vibes

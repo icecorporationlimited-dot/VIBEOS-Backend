@@ -73,7 +73,15 @@
 
         <div class="notice" id="engineNotice" hidden><svg class="ic"><use href="#i-alert"/></svg><div><strong>Posting isn’t switched on yet</strong><p>Your photos are saved, edited and ready. Posting to Instagram starts once the hosted posting engine is on for web accounts.</p></div></div>
 
-        <div class="streak" id="streakCard" hidden><span class="fire"><svg class="ic"><use href="#i-bolt"/></svg></span><div><strong id="streakNum"></strong><p id="streakText"></p></div></div>
+        <div class="streak" id="streakCard" hidden>
+  <span class="fire"><svg class="ic"><use href="#i-bolt"/></svg></span>
+  <div class="streak-main">
+    <strong id="streakNum"></strong>
+    <p id="streakText"></p>
+    <div class="streak-week" id="streakWeek" aria-label="Last 7 days"></div>
+  </div>
+  <div class="streak-best"><b id="streakBest"></b><small>best</small></div>
+</div>
 
         <div class="stats">
           <div class="stat"><b id="statMedia">0</b><span>photos</span><small>safe in your buffer</small></div>
