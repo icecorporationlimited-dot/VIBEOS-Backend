@@ -37,7 +37,7 @@ def build_story(item: dict, *, ai=None, brand="VIBEOS", blocked_topics=(), min_s
             photo, credit = found["bytes"], found["credit"]
     plan = {**plan, "photo_credit": credit}
     pubs = verify.publishers(item)
-    footer = ("Source: " + ", ".join(pubs[:3])) if show_sources and pubs else ""
+    footer = ("via " + " \u00b7 ".join(pubs[:3])) if show_sources and pubs else ""
     try:
         with tempfile.TemporaryDirectory(prefix="vibeos_smart_") as tmp:
             path = Path(tmp) / "story.jpg"
