@@ -18,6 +18,7 @@ from tagger_client import tag_photo
 import copywriter
 import photo_judge
 from content_buffer import ANALYZED, READY, SELECTED, UPLOADED
+import jobs
 from publishing.identity import Principal
 
 logger = logging.getLogger(__name__)
@@ -171,7 +172,17 @@ class WebPipeline:
                     exc,
                 )
 
-        raise ValueError(f"AI caption failed: {last}")
+        fallback = copywriter.FALLBACK_CAPTIONS.get(mode) or copywriter.FALLBACK_CAPTIONS["natural"]
+        logger.warning(
+            "Web caption failed twice (%s); using a neutral fallback caption",
+            last,
+        )
+        return {
+            "caption": fallback,
+            "hashtags": [],
+            "caption_style": mode,
+            "overlay": None,
+        }
 
     # ---- One asset --------------------------------------------------------
 
@@ -468,6 +479,23 @@ class WebIngest:
                     asset["_id"],
                 )
                 out[result] += 1
+
+            except jobs.JobTimeout:
+                # The worker job is still queued/running: slow, not failed.
+                # Keep the asset selected and check again in a minute;
+                # prepare_ready_job reuses the open job, so nothing duplicates.
+                logger.info(
+                    "Web prepare still running for %s; retrying in a minute",
+                    asset["_id"],
+                )
+                self.pipeline.note(asset["_id"], web_note="preparing")
+                timer = threading.Timer(
+                    60.0,
+                    self.submit,
+                    (principal, batch_id),
+                )
+                timer.daemon = True
+                timer.start()
 
             except Exception:
                 logger.exception(

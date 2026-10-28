@@ -60,7 +60,7 @@ def _groq_client():
     global _groq
     if _groq is None:
         from groq import Groq
-        _groq = Groq(api_key=settings.GROQ_API_KEY)
+        _groq = Groq(api_key=settings.GROQ_API_KEY, max_retries=1, timeout=45.0)
     return _groq
 
 

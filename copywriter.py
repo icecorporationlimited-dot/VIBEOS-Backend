@@ -30,6 +30,20 @@ CAPTION_STYLES = {
     "film": "nostalgic, analog, diary-like; quiet and observant",
 }
 
+# Used only when the AI caption service is unreachable on both attempts:
+# a neutral, honest one-liner keeps the photo flowing instead of failing the
+# whole prepare. No hashtags (better none than wrong ones).
+FALLBACK_CAPTIONS = {
+    "baddie": "unbothered, just letting the light talk",
+    "soft": "soft light, slow day",
+    "funny": "no thoughts, just this view",
+    "natural": "keeping this one",
+    "moody": "the light did all the talking today.",
+    "golden": "golden hour never misses",
+    "clean": "simple, quiet, exactly right.",
+    "film": "shot on a random tuesday",
+}
+
 LANGUAGES = {
     "english": "natural, modern English",
     "hinglish": (

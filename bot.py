@@ -93,7 +93,9 @@ grid_entries.create_index(
     unique=True,
 )
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+// Fail fast on Groq hiccups: 1 retry + 45s cap. The SDK default (2 retries
+// with 20s+ exponential backoff) lets a degraded API stall captions for minutes.
+groq_client = Groq(api_key=GROQ_API_KEY, max_retries=1, timeout=45.0)
 
 # Phase 1: durable media buffer (GridFS blobs + asset status in MongoDB)
 content_buffer = ContentBuffer(db["assets"], GridFSBlobStore(db))

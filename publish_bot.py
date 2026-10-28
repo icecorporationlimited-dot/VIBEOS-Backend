@@ -152,7 +152,9 @@ def build_runtime(db, content_buffer, bot_token):
     if web_login is not None:
         def _groq():
             from groq import Groq
-            return Groq(api_key=getattr(app_settings, "GROQ_API_KEY", ""))
+            # Fail fast so a slow Groq API cannot stall web prepares.
+            return Groq(api_key=getattr(app_settings, "GROQ_API_KEY", ""),
+                        max_retries=1, timeout=45.0)
         pipeline = WebPipeline(
             content_buffer, _groq,
             getattr(app_settings, "VISION_MODEL", "qwen/qwen3.8-27b"),
