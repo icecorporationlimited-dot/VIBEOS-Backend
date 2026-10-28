@@ -210,6 +210,34 @@ def draw_block(img, draw, lines, font, fill, y, line_h, *, center=True, shadow=N
     return y
 
 
+# ---------------------------------------------------------------- layouts
+LAYOUTS = ("photo_hero", "text_only", "meme_reaction", "handwritten")
+
+
+def _pick_layout(plan, kind, has_photo):
+    """Story form: the plan decides (AI), with a safe default per kind; text_only without a photo."""
+    layout = str(plan.get("layout") or "").strip().lower()
+    if kind == "solemn" or layout not in LAYOUTS:
+        layout = "photo_hero" if has_photo else "text_only"
+    if not has_photo and layout != "text_only":
+        layout = "text_only"
+    return layout
+
+
+def _sticker_text(img, lines, font, fill, y):
+    """Handwritten-style caption: drawn on its own layer, tilted like a sticker."""
+    emoji_px = int(font.size * 0.95)
+    layer = Image.new("RGBA", (W, 460), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    cy = 60
+    for line in lines:
+        draw_rich(layer, d, 140, cy, line, font, fill, emoji_px, shadow=(0, 0, 0, 70))
+        cy += int(font.size * 1.3)
+    layer = layer.rotate(-2.5, resample=Image.Resampling.BICUBIC, fillcolor=(0, 0, 0, 0))
+    img.paste(layer, (0, y - 40), layer)
+    return y + cy + 30
+
+
 # ---------------------------------------------------------------- backgrounds
 def _gradient(top, bottom):
     img = Image.new("RGB", (W, H))
@@ -418,8 +446,7 @@ def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, b
         plan = {**plan, "emojis": []}
         headline = EMOJI_RE.sub("", headline).strip()
     subline = str(plan.get("subline", "")).strip()
-    if theme.get("upper"):
-        headline = headline.upper()
+    # (all-caps headlines removed: stories read casual, not shouty)
 
     grads = GRADS.get(kind) or [theme["grad"]]
     img = _gradient(*grads[_rng(headline + str(seed)).randrange(len(grads))])
@@ -431,18 +458,31 @@ def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, b
         font = pick_font("medium", 30, label)
         spaced = " ".join(label)
         draw.text(((W - draw.textlength(spaced, font=font)) / 2, 310), spaced, font=font, fill=(150, 150, 150))
-    elif theme.get("chip"):
-        chip = str(plan.get("chip") or theme["chip"])[:28]
-        if kind in ("celebration", "congrats") and not plan.get("chip"):
-            chip = theme["chip"]
-        _chip(img, draw, theme, chip.upper() if not EMOJI_RE.search(chip) else chip)
-
+    layout = _pick_layout(plan, kind, photo_bytes is not None)
     ty = _place_photo(img, kind, theme, photo_bytes) if photo_bytes else _place_hero_emoji(img, kind, theme, plan)
     draw = ImageDraw.Draw(img)
     shadow = None if kind == "solemn" else (0, 0, 0, 90)
     style = theme["style"]
-    font, lines = wrap_fit(draw, headline, style, 88 if photo_bytes else 96, 54, W - 200, 3 if not photo_bytes else 2)
-    y = draw_block(img, draw, lines, font, theme["text"], ty, int(font.size * 1.22), shadow=shadow)
+    if kind == "solemn":
+        font, lines = wrap_fit(draw, headline, style, 88 if photo_bytes else 96, 54, W - 200, 3 if not photo_bytes else 2)
+        y = draw_block(img, draw, lines, font, theme["text"], ty, int(font.size * 1.22), shadow=shadow)
+    elif layout == "photo_hero" and photo_bytes:
+        font, lines = wrap_fit(draw, headline, "medium", 58, 38, W - 220, 2)      # small, natural, left-aligned
+        y = draw_block(img, draw, lines, font, theme["text"], ty, int(font.size * 1.35),
+                       center=False, x=110, shadow=shadow)
+    elif layout == "meme_reaction" and photo_bytes:
+        y0 = min(max(ty + 40, 620), H - 460)
+        band = Image.new("RGBA", (W, 340), (0, 0, 0, 130))                        # meme-style reaction strip
+        img.paste(band, (0, y0), band)
+        draw = ImageDraw.Draw(img)
+        font, lines = wrap_fit(draw, headline, "bold", 96, 62, W - 160, 2)
+        y = draw_block(img, draw, lines, font, (255, 255, 255), y0 + 50, int(font.size * 1.16))
+    elif layout == "handwritten" and photo_bytes:
+        font, lines = wrap_fit(draw, headline, "serif", 56, 36, W - 280, 2)        # Lora italic = handwritten vibe
+        y = _sticker_text(img, lines, font, theme["text"], ty)
+    else:                                                                         # text_only / no layout match
+        font, lines = wrap_fit(draw, headline, style, 96 if not photo_bytes else 88, 54, W - 200, 3 if not photo_bytes else 2)
+        y = draw_block(img, draw, lines, font, theme["text"], ty, int(font.size * 1.22), shadow=shadow)
     if kind == "solemn":
         draw.line((W / 2 - 60, y + 14, W / 2 + 60, y + 14), fill=(120, 120, 120), width=2)
         y += 40
@@ -451,7 +491,7 @@ def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, b
         draw_block(img, draw, slines, sfont, theme["sub"], y + 14, int(sfont.size * 1.4))
 
     credit = str(plan.get("photo_credit") or "").strip()
-    foot = " | ".join(p for p in (credit if photo_bytes else "", footer) if p)[:90]
+    foot = credit[:90] if (photo_bytes and credit) else ""           # news-source labels: removed
     if foot:
         ffont = pick_font("light", 24, foot)
         draw.text(((W - draw.textlength(foot, font=ffont)) / 2, 1478), foot, font=ffont,
