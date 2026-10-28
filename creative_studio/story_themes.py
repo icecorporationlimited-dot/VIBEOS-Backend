@@ -46,7 +46,7 @@ THEMES = {
                    accent=(255, 255, 255), style="serif", shape="circle", painter=None),
     "celebration": dict(grad=((255, 61, 129), (255, 168, 76)), text=(255, 255, 255), sub=(255, 240, 230),
                         accent=(255, 255, 255), style="bold", shape="round", painter="confetti",
-                        chip="CONGRATULATIONS \U0001F389", chip_fill=(255, 255, 255), chip_text=(200, 30, 90),
+                        chip="LET'S GO \U0001F389", chip_fill=(255, 255, 255), chip_text=(200, 30, 90),
                         hero="\U0001F389"),
     "festival": dict(grad=((70, 8, 30), (255, 132, 20)), text=(255, 226, 140), sub=(255, 240, 210),
                      accent=(255, 200, 80), style="bold", shape="arch", painter="bokeh",
@@ -54,31 +54,47 @@ THEMES = {
                      hero="\U0001FA94"),
     "sports": dict(grad=((6, 10, 30), (14, 40, 90)), text=(255, 255, 255), sub=(200, 225, 255),
                    accent=(0, 232, 150), style="bold", shape="round", painter="stripes",
-                   chip="LIVE BUZZ \u26A1", chip_fill=(0, 232, 150), chip_text=(5, 20, 20),
+                   chip="MATCH DAY \u26A1", chip_fill=(0, 232, 150), chip_text=(5, 20, 20),
                    hero="\U0001F3CF", upper=True),
     "game": dict(grad=((16, 6, 44), (60, 10, 90)), text=(120, 255, 255), sub=(235, 200, 255),
                  accent=(255, 60, 200), style="bold", shape="pixel", painter="grid",
-                 chip="PRESS START \U0001F3AE", chip_fill=(255, 60, 200), chip_text=(255, 255, 255),
+                 chip="GAMER MOMENT \U0001F3AE", chip_fill=(255, 60, 200), chip_text=(255, 255, 255),
                  hero="\U0001F3AE", upper=True),
     "music": dict(grad=((40, 0, 80), (255, 0, 110)), text=(255, 255, 255), sub=(255, 225, 240),
                   accent=(255, 255, 255), style="bold", shape="circle", painter="bars",
-                  chip="NOW TRENDING \U0001F3B5", chip_fill=(255, 255, 255), chip_text=(120, 0, 90),
+                  chip="ON REPEAT \U0001F3B5", chip_fill=(255, 255, 255), chip_text=(120, 0, 90),
                   hero="\U0001F3A4"),
     "movie": dict(grad=((8, 28, 36), (140, 70, 20)), text=(255, 225, 150), sub=(240, 230, 210),
                   accent=(240, 190, 90), style="bold", shape="round", painter="dots",
-                  chip="NOW SHOWING \U0001F3AC", chip_fill=(240, 190, 90), chip_text=(30, 20, 10),
+                  chip="WATCHLIST \U0001F3AC", chip_fill=(240, 190, 90), chip_text=(30, 20, 10),
                   hero="\U0001F3AC"),
     "tech": dict(grad=((4, 14, 40), (0, 70, 130)), text=(255, 255, 255), sub=(190, 225, 255),
                  accent=(0, 210, 255), style="bold", shape="round", painter="dots",
-                 chip="TECH BUZZ \U0001F916", chip_fill=(0, 210, 255), chip_text=(0, 25, 50),
+                 chip="TECH STUFF \U0001F916", chip_fill=(0, 210, 255), chip_text=(0, 25, 50),
                  hero="\U0001F4F1"),
     "general": dict(grad=((60, 40, 160), (20, 130, 200)), text=(255, 255, 255), sub=(225, 235, 255),
                     accent=(255, 255, 255), style="bold", shape="round", painter="dots",
-                    chip="TRENDING \U0001F525", chip_fill=(255, 255, 255), chip_text=(40, 30, 120),
+                    chip="TRENDING RN \U0001F525", chip_fill=(255, 255, 255), chip_text=(40, 30, 120),
                     hero="\U0001F525"),
 }
 THEMES["congrats"] = THEMES["celebration"]
 KINDS = tuple(THEMES)
+
+# 2-3 palettes per mood (seeded pick) so two Stories of the same kind never look identical.
+GRADS = {
+    "solemn": [((0, 0, 0), (0, 0, 0))],
+    "celebration": [((255, 61, 129), (255, 168, 76)), ((255, 94, 58), (255, 45, 149)),
+                    ((120, 0, 200), (255, 105, 180))],
+    "festival": [((70, 8, 30), (255, 132, 20)), ((122, 8, 60), (255, 92, 40)),
+                 ((60, 30, 5), (255, 170, 60))],
+    "sports": [((6, 10, 30), (14, 40, 90)), ((0, 22, 34), (0, 96, 84)), ((10, 5, 40), (84, 20, 104))],
+    "game": [((16, 6, 44), (60, 10, 90)), ((4, 24, 40), (0, 120, 130)), ((30, 0, 60), (120, 10, 60))],
+    "music": [((40, 0, 80), (255, 0, 110)), ((0, 60, 120), (170, 0, 200)), ((20, 0, 70), (0, 160, 170))],
+    "movie": [((8, 28, 36), (140, 70, 20)), ((24, 12, 40), (90, 30, 90)), ((5, 30, 24), (120, 90, 20))],
+    "tech": [((4, 14, 40), (0, 70, 130)), ((10, 0, 50), (60, 0, 130)), ((0, 30, 40), (0, 110, 100))],
+    "general": [((60, 40, 160), (20, 130, 200)), ((240, 90, 40), (120, 20, 140)), ((20, 0, 60), (0, 150, 120))],
+}
+GRADS["congrats"] = GRADS["celebration"]
 
 
 # ---------------------------------------------------------------- fonts / emoji
@@ -252,12 +268,66 @@ def _paint(img, kind, theme, seed):
 
 
 # ---------------------------------------------------------------- photo shapes
-def _cover(photo: Image.Image, w, h, top_bias=0.25):
+_YUNET = {"det": None, "tried": False}
+_YUNET_FILE = "face_detection_yunet_2023mar.onnx"
+
+
+def _yunet():
+    """Lazy optional YuNet (same ONNX the collage worker uses). None if cv2/model missing."""
+    if _YUNET["tried"]:
+        return _YUNET["det"]
+    _YUNET["tried"] = True
+    try:
+        import cv2
+        root = Path(__file__).resolve().parents[1]
+        path = next((str(p) for p in (root / "models" / _YUNET_FILE, Path("/app/models") / _YUNET_FILE)
+                     if p.is_file() and p.stat().st_size > 100_000), None)
+        if path:
+            _YUNET["det"] = cv2.FaceDetectorYN.create(path, "", (320, 320), 0.6, 0.3, 5000)
+    except Exception:
+        pass
+    return _YUNET["det"]
+
+
+def _face_box(photo: Image.Image):
+    """Union of detected faces as normalised [x0, y0, x1, y1], or None (soft: never raises)."""
+    det = _yunet()
+    if det is None:
+        return None
+    try:
+        import cv2
+        import numpy as np
+        small = photo.copy()
+        small.thumbnail((640, 640))
+        w, h = small.size
+        bgr = cv2.cvtColor(np.array(small.convert("RGB")), cv2.COLOR_RGB2BGR)
+        det.setInputSize((w, h))
+        _, rows = det.detect(bgr)
+        if rows is None or not len(rows):
+            return None
+        boxes = [(max(x, 0) / w, max(y, 0) / h, min(x + fw, w) / w, min(y + fh, h) / h)
+                 for x, y, fw, fh in ((float(v) for v in r[:4]) for r in rows) if fw >= 10 and fh >= 10]
+        if not boxes:
+            return None
+        return [min(b[0] for b in boxes), min(b[1] for b in boxes),
+                max(b[2] for b in boxes), max(b[3] for b in boxes)]
+    except Exception:
+        return None
+
+
+def _cover(photo: Image.Image, w, h, top_bias=0.25, face=None):
     ratio = max(w / photo.width, h / photo.height)
     resized = photo.resize((max(w, round(photo.width * ratio)), max(h, round(photo.height * ratio))),
                            Image.Resampling.LANCZOS)
-    left = (resized.width - w) // 2
-    top = round((resized.height - h) * top_bias)
+    left, top = (resized.width - w) // 2, round((resized.height - h) * top_bias)
+    if face:                                       # keep the face union inside the tile
+        rw, rh = resized.width, resized.height
+        cx, cy = (face[0] + face[2]) / 2 * rw, (face[1] + face[3]) / 2 * rh
+        left = max(0, min(rw - w, round(cx - w / 2)))
+        top = round(cy - h * 0.42)                 # face slightly above centre
+        top = max(int(face[1] * rh - 0.10 * h), top)      # keep headroom above
+        top = min(int(face[3] * rh + 0.10 * h) - h, top)   # ...and room below
+        top = max(0, min(rh - h, top))
     return resized.crop((left, top, left + w, top + h))
 
 
@@ -286,7 +356,7 @@ def _place_photo(img, kind, theme, photo_bytes):
         photo = ImageOps.exif_transpose(Image.open(io.BytesIO(photo_bytes))).convert("RGB")
     except Exception as exc:
         raise ValueError("photo is not a readable image") from exc
-    tile = _cover(photo, *size)
+    tile = _cover(photo, *size, face=_face_box(photo))
     if kind == "solemn":
         tile = ImageOps.grayscale(tile)
         tile = ImageOps.autocontrast(tile, cutoff=1).convert("RGB")
@@ -351,7 +421,8 @@ def render_story(plan: dict, output_path, *, photo_bytes: bytes | None = None, b
     if theme.get("upper"):
         headline = headline.upper()
 
-    img = _gradient(*theme["grad"])
+    grads = GRADS.get(kind) or [theme["grad"]]
+    img = _gradient(*grads[_rng(headline + str(seed)).randrange(len(grads))])
     _paint(img, kind, theme, headline + str(seed))
     draw = ImageDraw.Draw(img)
 
