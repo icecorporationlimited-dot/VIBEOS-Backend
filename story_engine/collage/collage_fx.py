@@ -31,6 +31,8 @@ SS = 2                                                           # supersampling
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_DIR = Path(os.getenv("COLLAGE_ASSETS") or (ROOT / "assets" / "collage"))
 PROJECT_FONTS = ROOT / "fonts"
+
+import asset_hub as hub               # shared asset pools: assets/collage FIRST, then assets/vibe
 CANVAS = (1080, 1920)
 LANCZOS, BICUBIC = Image.Resampling.LANCZOS, Image.Resampling.BICUBIC
 
@@ -78,46 +80,34 @@ def _apply_variation(f, size, weight):
 
 @lru_cache(maxsize=128)
 def family_font(key, size, weight=None):
-    """Font for a FAMILIES key. Falls back to the project's Poppins / Lora, then DejaVu, then PIL's default."""
+    """Font for a FAMILIES key, via the shared asset hub: this engine's pool
+    (assets/collage/fonts) first, then the vibe pool, the project fonts and
+    the system fallback."""
     main, fallback = FAMILIES[key]
-    for path, variable in ((ASSET_DIR / "fonts" / main, True), (PROJECT_FONTS / fallback, False), (Path(_SYSTEM_FALLBACK), False)):
-        try:
-            f = ImageFont.truetype(str(path), size)
-            if variable:
-                _apply_variation(f, size, weight)
-            return f
-        except Exception:
-            continue
-    return ImageFont.load_default()
+    return hub.load_font((main, fallback), size, weight=weight,
+                         first_dir=ASSET_DIR / "fonts")
 
 
 def has_font(key):
-    return (ASSET_DIR / "fonts" / FAMILIES[key][0]).is_file()
+    return hub.find("fonts", FAMILIES[key][0], first_dir=ASSET_DIR / "fonts") is not None
 
 
 # =============================================================== asset loading (cached, small)
 @lru_cache(maxsize=48)
 def _asset(rel):
-    p = ASSET_DIR / rel
-    try:
-        im = Image.open(p); im.load()
-        return im.convert("RGBA") if im.mode not in ("RGBA", "L") else im
-    except Exception:
-        return None
+    return hub.load_rel(rel, first_dir=ASSET_DIR)
 
 
 def asset(rel):
-    """Copy of assets/collage/<rel> as RGBA / L, or None when missing."""
+    """Copy of an asset as RGBA / L, or None when missing. Shared pools via the
+    hub: assets/collage/<rel> first, then the same folder under assets/vibe."""
     im = _asset(rel)
     return im.copy() if im is not None else None
 
 
 def asset_names(subdir):
-    d = ASSET_DIR / subdir
-    try:
-        return sorted(p.stem for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg"))
-    except Exception:
-        return []
+    """Asset names of a kind across BOTH pools (manifest + directory scan)."""
+    return hub.list_names(subdir)
 
 
 def np_rng(rng):

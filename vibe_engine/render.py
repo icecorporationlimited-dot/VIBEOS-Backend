@@ -12,21 +12,27 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 W, H = 1080, 1920
-FONT_DIR = Path(__file__).resolve().parents[1] / "fonts"
-EMOJI_FONTS = ["/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-               "/usr/share/fonts/noto/NotoColorEmoji.ttf",
-               "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf"]
+import asset_hub as hub              # shared asset pools: assets/vibe first, then assets/collage, then fonts/
 EMOJI_RE = __import__("re").compile("([\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2300-\u23FF][\uFE0F\u200D]*)")
+
+# Style -> candidate chain, resolved through the shared asset hub: an Inter
+# upload (Asset Studio, assets/vibe/fonts) upgrades the look the moment it
+# lands; Poppins / Lora stay the proven fallback.
+_FONT_CANDIDATES = {
+    "bold": ("Inter-Bold.ttf", "Inter.ttf", "Poppins-Bold.ttf"),
+    "medium": ("Inter-Medium.ttf", "Inter.ttf", "Poppins-Medium.ttf"),
+    "light": ("Inter-Light.ttf", "Inter.ttf", "Poppins-Light.ttf"),
+    "serif": ("Lora-Italic-Variable.ttf",),
+}
+
 
 @lru_cache(maxsize=16)
 def _font(style, size):
-    name = {"bold": "Poppins-Bold.ttf", "medium": "Poppins-Medium.ttf", "light": "Poppins-Light.ttf",
-            "serif": "Lora-Italic-Variable.ttf"}[style]
-    return ImageFont.truetype(str(FONT_DIR / name), size)
+    return hub.load_font(_FONT_CANDIDATES.get(style) or _FONT_CANDIDATES["bold"], size)
 
 
 def _emoji_font_path():
-    return next((p for p in EMOJI_FONTS if Path(p).exists()), None)
+    return hub.emoji_font_path()
 
 
 @lru_cache(maxsize=128)
@@ -48,8 +54,11 @@ def _emoji_img(ch, px):
         return None
 
 
-def _strip_emoji(text):
-    return EMOJI_RE.sub("", text).strip() if _emoji_font_path() is None else text
+def _split_emoji(text):
+    """(text without emoji, up to 2 emoji) - emojis are pasted as real color
+    glyphs, never as tofu boxes in the caption font."""
+    emojis = EMOJI_RE.findall(text or "")
+    return EMOJI_RE.sub("", text or "").strip(), list(dict.fromkeys(emojis))[:2]
 
 
 def _cover(photo, faces, zoom=1.0):
@@ -67,11 +76,31 @@ def _cover(photo, faces, zoom=1.0):
 
 
 def _grain(img, amount):
+    # Shared film-grain texture when one is uploaded (assets/vibe/textures),
+    # otherwise the proven procedural noise.
+    tex = hub.load_image("textures", "grain_soft")
+    if tex is not None:
+        g = tex.convert("L")
+        if g.size != (W, H):
+            g = g.resize((W, H), Image.Resampling.LANCZOS)
+        img.paste(Image.blend(img, Image.merge("RGB", (g, g, g)),
+                              min(0.30, float(amount) * 2)), (0, 0))
+        return
     noise = Image.effect_noise((W, H), 28).convert("L")
     img.paste(Image.blend(img, Image.merge("RGB", (noise, noise, noise)), amount), (0, 0))
 
 
 def _vignette(img):
+    tex = hub.load_image("textures", "vignette_soft")
+    if tex is not None:                      # uploaded overlay / darkness map
+        tex = tex.resize((W, H), Image.Resampling.LANCZOS)
+        alpha = tex.getchannel("A") if tex.mode == "RGBA" else None
+        if alpha is not None and alpha.getextrema()[0] < 255:
+            img.paste(tex.convert("RGB"), (0, 0), alpha)
+        else:
+            dark = tex.convert("L").point(lambda v: int((255 - v) * 0.45))
+            img.paste(Image.new("RGB", (W, H), (0, 0, 0)), (0, 0), dark)
+        return
     mask = Image.radial_gradient("L").resize((W, H)).point(lambda v: int(v * 0.45))
     img.paste(Image.new("RGB", (W, H), (0, 0, 0)), (0, 0), ImageOps.invert(mask))
 
@@ -100,7 +129,7 @@ def render_story(photo, layout, emoji_px_ratio=1.0):
     if t.get("grain"):
         _grain(img, min(0.10, float(t["grain"])))
 
-    text = _strip_emoji(str(layout.get("caption") or ""))
+    text, cap_emojis = _split_emoji(str(layout.get("caption") or ""))
     if text and not layout.get("no_text"):
         from vibe_engine.personalities import PERSONALITIES
         p = PERSONALITIES[layout["persona"]]
@@ -132,6 +161,13 @@ def render_story(photo, layout, emoji_px_ratio=1.0):
         for line in lines:
             d.text((x, ty), line, font=font, fill=fill)
             ty += line_h
+        if cap_emojis:                       # caption emojis as real color glyphs
+            lx = x + d.textlength(lines[-1], font=font) + 18
+            for em in cap_emojis:
+                glyph = _emoji_img(em, int(font.size * 1.15))
+                if glyph:
+                    layer.paste(glyph, (int(lx), int(ty - line_h - glyph.height // 6)), glyph)
+                    lx += glyph.width + 10
         layer = layer.rotate(layout.get("tilt", 0.0), resample=Image.Resampling.BICUBIC,
                             fillcolor=(0, 0, 0, 0))
         img.paste(layer, (0, max(0, int(y - 60))), layer)
