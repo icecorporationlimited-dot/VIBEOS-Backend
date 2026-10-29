@@ -30,12 +30,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, features
 
 W, H = 1080, 1920
-FONT_DIR = Path(__file__).resolve().parents[1] / "fonts"
-EMOJI_FONTS = [
-    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
-    "/usr/share/fonts/truetype/noto-color-emoji/NotoColorEmoji.ttf",
-]
+import asset_hub as hub              # shared asset pools: assets/vibe first, then assets/collage, then fonts/
 DEVA_RE = re.compile(r"[\u0900-\u097F]")
 EMOJI_RE = re.compile(
     "([\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2300-\u23FF]"
@@ -103,18 +98,27 @@ def _first_existing(paths):
 
 
 def has_emoji_font() -> bool:
-    return _first_existing(EMOJI_FONTS) is not None
+    return hub.emoji_font_path() is not None
 
 
 def raqm_ok() -> bool:
     return bool(features.check("raqm"))
 
 
+# Style -> candidate chain, resolved through the shared asset hub: an Inter
+# upload (assets/vibe/fonts) upgrades the look the moment it lands; Poppins /
+# Lora stay the proven fallback.
+_FONT_CANDIDATES = {
+    "bold": ("Inter-Bold.ttf", "Inter.ttf", "Poppins-Bold.ttf"),
+    "medium": ("Inter-Medium.ttf", "Inter.ttf", "Poppins-Medium.ttf"),
+    "light": ("Inter-Light.ttf", "Inter.ttf", "Poppins-Light.ttf"),
+    "serif": ("Lora-Italic-Variable.ttf",),
+}
+
+
 @lru_cache(maxsize=64)
 def _font(style: str, size: int):
-    name = {"bold": "Poppins-Bold.ttf", "medium": "Poppins-Medium.ttf",
-            "light": "Poppins-Light.ttf", "serif": "Lora-Italic-Variable.ttf"}[style]
-    return ImageFont.truetype(str(FONT_DIR / name), size)
+    return hub.load_font(_FONT_CANDIDATES.get(style) or _FONT_CANDIDATES["bold"], size)
 
 
 def pick_font(style: str, size: int, text: str = ""):
@@ -127,7 +131,7 @@ def pick_font(style: str, size: int, text: str = ""):
 
 @lru_cache(maxsize=256)
 def _emoji_img(ch: str, px: int):
-    path = _first_existing(EMOJI_FONTS)
+    path = hub.emoji_font_path()
     if not path:
         return None
     try:

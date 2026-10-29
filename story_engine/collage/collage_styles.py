@@ -26,7 +26,7 @@ from . import collage_fx as fx
 
 log = logging.getLogger(__name__)
 W, H = 1080, 1920
-_FONTS = Path(__file__).resolve().parents[2] / "fonts"
+import asset_hub as hub               # shared asset pools: assets/collage first, then assets/vibe
 _FILES = {"bold": "Poppins-Bold.ttf", "medium": "Poppins-Medium.ttf", "light": "Poppins-Light.ttf",
           "serif": "Lora-Italic-Variable.ttf"}
 THEMES = ("playful_hype", "kpop_editorial", "photo_dump", "streetwear_baddie", "classy_editorial", "scrapbook_chaos")
@@ -36,16 +36,16 @@ GRAIN = {"playful_hype": 0.04, "kpop_editorial": 0.045, "photo_dump": 0.08, "str
 
 # ------------------------------------------------------------------ helpers
 def font(kind, size, weight=None):
-    """kind: bold / medium / light / serif (Poppins, Lora) or a collage_fx.FAMILIES key (caveat, reenie, gaegu, elite,
-    playfair, playfair_i, bodoni, bodoni_i, anton, bebas, marker)."""
+    """kind: bold / medium / light / serif or a collage_fx.FAMILIES key (caveat, reenie,
+    gaegu, elite, playfair, bodoni, anton, bebas, marker). Everything resolves
+    through the shared asset hub, so an Inter upload (assets/vibe/fonts)
+    upgrades headings too; Poppins / Lora stay the fallback."""
     if kind in fx.FAMILIES:
         return fx.family_font(kind, size, weight)
-    for p in (_FONTS / _FILES[kind], Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")):
-        try:
-            return ImageFont.truetype(str(p), size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
+    inter = {"bold": "Inter-Bold.ttf", "medium": "Inter-Medium.ttf",
+             "light": "Inter-Light.ttf"}.get(kind)
+    cands = [c for c in (inter, "Inter.ttf", _FILES[kind]) if c]
+    return hub.load_font(cands, size, weight=weight)
 
 
 def _load(p):
