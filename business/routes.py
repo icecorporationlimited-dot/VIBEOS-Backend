@@ -250,4 +250,20 @@ class WebBusinessRoutes:
             tasks = campaigns.tasks(owner, wid, cid)
             return (200, _dump({"tasks": tasks}), {}) if tasks is not None else (
                 404, '{"error":"Campaign not found."}', {})
+        if act == "metrics" and method == "GET":
+            from .analytics import campaign_metrics
+            if campaigns.get(owner, wid, cid) is None:
+                return 404, '{"error":"Campaign not found."}', {}
+            return 200, _dump(
+                {"metrics": campaign_metrics(self.store, wid, cid)}), {}
+        if act == "optimise" and method == "POST":
+            from .optimisation import OptimisationAgent
+            if campaigns.get(owner, wid, cid) is None:
+                return 404, '{"error":"Campaign not found."}', {}
+            try:
+                doc = OptimisationAgent(self.store).evaluate(wid, cid)
+            except AgentError as exc:
+                return 400, _dump({"error": str(exc)[:200]}), {}
+            return (200, _dump({"campaign": doc}), {}) if doc else (
+                404, '{"error":"Campaign not found."}', {})
         return 404, '{"error":"Not found."}', {}

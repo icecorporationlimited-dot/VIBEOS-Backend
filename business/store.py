@@ -74,6 +74,8 @@ class BusinessStore:
         self.jobs.create_index([("workspace_id", 1), ("status", 1), ("created_at", -1)])
         self.schedules.create_index([("workspace_id", 1), ("scheduled_at", 1)])
         self.metrics.create_index([("workspace_id", 1), ("created_at", -1)])
+        self.metrics.create_index([("campaign_id", 1), ("content_id", 1),
+                                   ("captured_at", -1)])
         self.leads.create_index([("workspace_id", 1), ("status", 1), ("created_at", -1)])
         self.events.create_index([("workspace_id", 1), ("created_at", -1)])
         self.settings.create_index("workspace_id", unique=True)

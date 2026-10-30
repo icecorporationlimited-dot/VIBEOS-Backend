@@ -434,6 +434,7 @@
         acts += act('brief', briefOk ? 'Re-run brief' : 'Strategy brief');
         if (briefOk) acts += act('plan', planOk ? 'Re-plan' : 'Content plan');
         if (planOk) acts += act('generate', 'Generate content');
+        if (s === 'active') acts += act('optimise', 'Optimise');
       }
       if (s === 'draft' || s === 'paused') acts += act('start', 'Start');
       if (s === 'active') acts += act('pause', 'Pause');
@@ -463,6 +464,16 @@
       ]);
       const c = r.campaign || {};
       const b = c.brief || {};
+      const o = c.optimisation || {};
+      const optimisationBlock = o.summary
+        ? '<div class="item"><div style="flex:1;min-width:0"><strong>Optimisation</strong>' +
+          '<small>' + escapeHTML(o.summary) + '</small>' +
+          '<small>' + (o.recommendations || []).map(r =>
+            '&bull; ' + escapeHTML(r.title ? r.title + (r.detail ? ' &mdash; ' + r.detail : '') : String(r))).join('<br>') + '</small>' +
+          '<small>Based on ' + escapeHTML((o.based_on && o.based_on.posts) || 0) +
+          ' published posts with real Instagram metrics' +
+          (o.generated_at ? ' &middot; ' + escapeHTML(when(o.generated_at)) : '') + '</small></div></div>'
+        : '';
       const blk = (k, arr) => (arr && arr.length)
         ? '<div class="item"><strong>' + escapeHTML(k) + '</strong><small>' + arr.map(x => '&bull; ' + escapeHTML(x)).join('<br>') + '</small></div>'
         : '';
@@ -480,12 +491,18 @@
             (sch.permalink ? ' &middot; <a href="' + escapeHTML(sch.permalink) + '" target="_blank" rel="noopener">view post</a>' : '') +
             '</small>'
           : '';
+        const mt = x.metrics || {};
+        const metricsLine = (mt.likes != null)
+          ? '<small>&#10084; ' + escapeHTML(mt.likes) + ' &middot; &#128172; ' +
+            escapeHTML(mt.comments != null ? mt.comments : 0) +
+            (mt.reach != null ? ' &middot; reach ' + escapeHTML(mt.reach) : '') + '</small>'
+          : '';
         return '<div class="item"><div style="flex:1;min-width:0">' +
           '<strong>Day ' + (x.day || '?') + ' &middot; ' + escapeHTML(x.format || 'feed') +
           ' ' + campaignTag(x.status) + '</strong>' +
           '<small>' + escapeHTML(x.caption || '') + '</small>' +
           '<small>' + (x.hashtags || []).map(h => escapeHTML(h)).join(' ') + qcIssues + '</small>' +
-          schedLine + '</div></div>';
+          schedLine + metricsLine + '</div></div>';
       }).join('');
       body.innerHTML =
         blk('Positioning', b.positioning ? [b.positioning] : []) +
@@ -493,7 +510,8 @@
         blk('Content angles', b.content_angles) +
         blk('Never say', b.do_not_say) +
         (plan || '<div class="empty">No plan yet.</div>') +
-        (content || '');
+        (content || '') +
+        optimisationBlock;
     } catch (err) { body.textContent = err.message; }
   }
 
@@ -503,7 +521,7 @@
     btn.disabled = true; btn.textContent = 'Working...';
     try {
       const r = await api('/' + ws._id + '/campaigns/' + cid + '/' + act, 'POST', {});
-      toast('Campaign ' + ((r.campaign && r.campaign.status) || act));
+      toast(act === 'optimise' ? 'Optimisation saved' : 'Campaign ' + ((r.campaign && r.campaign.status) || act));
       await loadCampaigns();
     } catch (err) {
       toast(err.message);
