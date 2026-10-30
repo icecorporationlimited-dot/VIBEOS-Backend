@@ -58,7 +58,11 @@
   }
 
   // --------------------------------------------------------------- navigation
+  function currentMode() { return document.documentElement.dataset.mode === 'business' ? 'business' : 'personal'; }
   function navigate(view) {
+    // Business mode only shows the business view; personal mode never shows it.
+    if (currentMode() === 'business') view = 'business';
+    else if (view === 'business') view = 'dashboard';
     document.querySelectorAll('.view').forEach(e => e.classList.toggle('active', e.id === 'view-' + view));
     document.querySelectorAll('.nav-item[data-view], .tab-item[data-view]').forEach(e => {
       const on = e.dataset.view === view;
@@ -68,7 +72,23 @@
     window.location.hash = view;
     window.scrollTo(0, 0);
     if (view === 'occasions') loadOccasions();
+    if (view === 'business' && window.VibeosBusiness) window.VibeosBusiness.enter();
   }
+
+  // ------------------------------------------------- personal / business mode
+  function setMode(mode) {
+    mode = mode === 'business' ? 'business' : 'personal';
+    document.documentElement.dataset.mode = mode;
+    try { localStorage.setItem('vibeos_mode', mode); } catch (e) { /* private mode */ }
+    ['modeToggle', 'modeToggleTop'].forEach(id => { const el = $(id); if (el) el.checked = mode === 'business'; });
+    document.title = mode === 'business' ? 'vibeos business: your brand on autopilot' : 'vibeos: your feed on autopilot';
+    navigate(mode === 'business' ? 'business' : 'dashboard');
+    toast(mode === 'business' ? 'Business mode on' : 'Back to personal');
+  }
+  ['modeToggle', 'modeToggleTop'].forEach(id => {
+    const el = $(id);
+    if (el) el.addEventListener('change', e => setMode(e.target.checked ? 'business' : 'personal'));
+  });
   document.querySelectorAll('[data-view]').forEach(e => e.addEventListener('click', () => navigate(e.dataset.view)));
   $('tipButton').addEventListener('click', e => { e.currentTarget.closest('.tip').style.display = 'none'; });
 
@@ -585,11 +605,22 @@
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { currentFilter = b.dataset.filter; renderMedia(); }));
   $('mediaSort').addEventListener('change', renderMedia);
 
+  function setModeQuiet(mode) {
+    document.documentElement.dataset.mode = mode;
+    try { localStorage.setItem('vibeos_mode', mode); } catch (e) { /* ignore */ }
+    ['modeToggle', 'modeToggleTop'].forEach(id => { const el = $(id); if (el) el.checked = mode === 'business'; });
+    document.title = 'vibeos business: your brand on autopilot';
+    navigate('business');
+  }
+
   async function boot() {
+    ['modeToggle', 'modeToggleTop'].forEach(id => { const el = $(id); if (el) el.checked = currentMode() === 'business'; });
     await loadMe();
     showSkeletons();
     await loadState();
     const hash = (location.hash || '#dashboard').slice(1);
+    if (hash === 'business') { setModeQuiet('business'); return; }
+    if (currentMode() === 'business') { setModeQuiet('business'); return; }
     if (['dashboard', 'media', 'occasions', 'notifications', 'settings'].includes(hash)) navigate(hash);
   }
   boot();
