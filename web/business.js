@@ -40,6 +40,7 @@
   let workspaces = [];
   let ws = null;         // current workspace doc
   let dash = null;       // dashboard payload
+  let campaigns = [];    // current workspace campaigns
   let obIndex = 0;
   let toastTimer;
 
@@ -306,6 +307,7 @@
     renderProducts();
     renderSettings();
     renderEvents();
+    loadCampaigns();
   }
 
   // products
@@ -401,6 +403,90 @@
       '<small>' + escapeHTML(e.kind) + '</small></div><span class="time">' + escapeHTML(when(e.created_at)) + '</span></div>').join('');
   }
 
+  // -------------------------------------------------------------- campaigns
+  function campaignTag(s) {
+    const cls = s === 'active' ? 'active' : (s === 'stopped' ? 'stopped' : 'onboarding');
+    return '<span class="tag ' + cls + '">' + escapeHTML(s || 'draft') + '</span>';
+  }
+  function goalLabel(g) { return (GOALS.find(x => x[0] === g) || [g, g || ''])[1]; }
+
+  async function loadCampaigns() {
+    try {
+      const r = await api('/' + ws._id + '/campaigns');
+      campaigns = r.campaigns || [];
+      renderCampaigns();
+    } catch (err) { toast(err.message); }
+  }
+
+  function renderCampaigns() {
+    const host = $('campaignList');
+    if (!campaigns.length) {
+      host.innerHTML = '<div class="empty">No campaigns yet. Create one, generate a brief and a plan, then start it.</div>';
+      return;
+    }
+    host.innerHTML = campaigns.map(c => {
+      const s = c.status || 'draft';
+      const briefOk = !!(c.brief && c.brief.positioning);
+      const planOk = !!(c.plan && c.plan.length);
+      let acts = '';
+      const act = (a, label) => '<button class="mini mut" data-act="' + a + '" data-cid="' + escapeHTML(c._id) + '">' + label + '</button>';
+      if (s !== 'stopped') {
+        acts += act('brief', briefOk ? 'Re-run brief' : 'Strategy brief');
+        if (briefOk) acts += act('plan', planOk ? 'Re-plan' : 'Content plan');
+      }
+      if (s === 'draft' || s === 'paused') acts += act('start', 'Start');
+      if (s === 'active') acts += act('pause', 'Pause');
+      if (s === 'paused') acts += act('resume', 'Resume');
+      if (s !== 'stopped') acts += act('stop', 'Stop');
+      return '<div class="item"><div style="flex:1;min-width:0">' +
+        '<strong>' + escapeHTML(c.name) + ' ' + campaignTag(s) + '</strong>' +
+        '<small>' + escapeHTML(goalLabel(c.objective)) + ' &middot; ' + (c.duration_days || 14) + ' days' +
+        (briefOk ? ' &middot; brief ready' : '') +
+        (planOk ? ' &middot; ' + c.plan.length + ' planned posts' : '') + '</small></div>' +
+        '<span style="white-space:nowrap">' + acts + '</span></div>' +
+        '<details data-detail="' + escapeHTML(c._id) + '"><summary style="cursor:pointer;color:var(--mut);font-size:12.5px">Brief &amp; plan</summary><div class="detailBody" style="padding:8px 0"></div></details>';
+    }).join('');
+    host.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => campaignAction(b)));
+    host.querySelectorAll('[data-detail]').forEach(d => d.addEventListener('toggle', () => {
+      if (d.open) loadCampaignDetail(d.dataset.detail, d.querySelector('.detailBody'));
+    }));
+  }
+
+  async function loadCampaignDetail(cid, body) {
+    body.textContent = 'Loading...';
+    try {
+      const r = await api('/' + ws._id + '/campaigns/' + cid);
+      const c = r.campaign || {};
+      const b = c.brief || {};
+      const blk = (k, arr) => (arr && arr.length)
+        ? '<div class="item"><strong>' + escapeHTML(k) + '</strong><small>' + arr.map(x => '&bull; ' + escapeHTML(x)).join('<br>') + '</small></div>'
+        : '';
+      const plan = (c.plan || []).map(p =>
+        '<div class="item"><strong>Day ' + (p.day || '?') + ' &middot; ' + escapeHTML(p.format || 'feed') + '</strong>' +
+        '<small>' + escapeHTML(p.angle || '') + (p.note ? ' &mdash; ' + escapeHTML(p.note) : '') + '</small></div>').join('');
+      body.innerHTML =
+        blk('Positioning', b.positioning ? [b.positioning] : []) +
+        blk('Key messages', b.key_messages) +
+        blk('Content angles', b.content_angles) +
+        blk('Never say', b.do_not_say) +
+        (plan || '<div class="empty">No plan yet.</div>');
+    } catch (err) { body.textContent = err.message; }
+  }
+
+  async function campaignAction(btn) {
+    const cid = btn.dataset.cid, act = btn.dataset.act;
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Working...';
+    try {
+      const r = await api('/' + ws._id + '/campaigns/' + cid + '/' + act, 'POST', {});
+      toast('Campaign ' + ((r.campaign && r.campaign.status) || act));
+      await loadCampaigns();
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false; btn.textContent = label;
+    }
+  }
+
   // ------------------------------------------------------------------ events
   $('newWsBtn').addEventListener('click', () => { $('newWsForm').classList.remove('hidden'); $('newName').focus(); });
   $('cancelNewWs').addEventListener('click', () => { $('newWsForm').classList.add('hidden'); $('newName').value = ''; });
@@ -421,6 +507,28 @@
   $('obFinish').addEventListener('click', async () => {
     const ok = await saveStep(false);
     if (ok) activate();
+  });
+  $('addCampaignBtn').addEventListener('click', () => {
+    if (!$('campObjective').options.length) {
+      $('campObjective').innerHTML = GOALS.map(g => '<option value="' + g[0] + '">' + g[1] + '</option>').join('');
+    }
+    $('campaignForm').classList.remove('hidden');
+    $('campName').focus();
+  });
+  $('campCancel').addEventListener('click', () => { $('campaignForm').classList.add('hidden'); $('campName').value = ''; });
+  $('campSave').addEventListener('click', async () => {
+    const name = $('campName').value.trim();
+    if (!name) { toast('Give the campaign a name.'); return; }
+    try {
+      await api('/' + ws._id + '/campaigns', 'POST', {
+        name, objective: $('campObjective').value,
+        duration_days: Number($('campDuration').value),
+      });
+      $('campName').value = '';
+      $('campaignForm').classList.add('hidden');
+      toast('Campaign created as draft');
+      loadCampaigns();
+    } catch (err) { toast(err.message); }
   });
   $('addProductBtn').addEventListener('click', () => openProductForm(null));
   $('prodSave').addEventListener('click', saveProduct);

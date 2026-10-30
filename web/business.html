@@ -63,6 +63,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--acc2);outline-of
 .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 9px}
 .tag.onboarding{background:var(--chip);color:var(--mut)}
 .tag.active{background:rgba(31,157,85,.14);color:var(--ok)}
+.tag.stopped{background:var(--chip);color:var(--bad)}
 .stat{display:flex;flex-direction:column;gap:2px;padding:14px;border:1px solid var(--line);border-radius:12px}
 .stat b{font-family:"Bricolage Grotesque",sans-serif;font-size:22px}
 .stat span{color:var(--mut);font-size:12px}
@@ -194,6 +195,27 @@ footer{color:var(--mut);font-size:12px;text-align:center;padding:18px 0 4px}
             </div>
           </div>
           <div id="productList"></div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="align-items:baseline;justify-content:space-between">
+            <h2>Campaigns</h2>
+            <button class="btn ghost sm" id="addCampaignBtn">+ New campaign</button>
+          </div>
+          <p class="hint">A campaign turns your brand profile into a concrete plan. The Strategy agent writes the brief, the Planning agent builds the day-by-day content plan. Nothing is published from here.</p>
+          <div id="campaignForm" class="hidden" style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+            <label for="campName">Campaign name</label>
+            <input type="text" id="campName" maxlength="120" placeholder="e.g. October footfall push">
+            <div class="row">
+              <div><label for="campObjective">Objective</label><select id="campObjective"></select></div>
+              <div><label for="campDuration">Duration</label><select id="campDuration"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option></select></div>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn sm" id="campSave">Create campaign</button>
+              <button class="btn ghost sm" id="campCancel">Cancel</button>
+            </div>
+          </div>
+          <div id="campaignList"></div>
         </div>
 
         <div class="grid two">

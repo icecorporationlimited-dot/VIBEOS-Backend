@@ -11,6 +11,8 @@ import json
 import logging
 from http.cookies import SimpleCookie
 
+from .agents import AgentError, Orchestrator
+from .campaigns import CampaignStore
 from .store import owner_key
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,8 @@ class WebBusinessRoutes:
             return self._route(method, path, cookie_header, headers, raw_body)
         except ValueError as exc:
             return 400, _dump({"error": str(exc)[:200]}), {}
+        except AgentError as exc:
+            return 502, _dump({"error": str(exc)[:200]}), {}
         except Exception:
             logger.exception("Business route failed: %s %s", method, path)
             return 500, '{"error":"Something went wrong."}', {}
@@ -129,6 +133,8 @@ class WebBusinessRoutes:
                 404, '{"error":"Workspace not found."}', {})
         if section == "products":
             return self._products(method, owner, wid, rest[1:], data)
+        if section == "campaigns":
+            return self._campaigns(method, owner, wid, rest[1:], data)
         if section == "settings":
             if method == "GET":
                 doc = self.store.get_settings(owner, wid)
@@ -162,3 +168,52 @@ class WebBusinessRoutes:
             return (200, '{"ok": true}', {}) if ok else (
                 404, '{"error":"Product not found."}', {})
         return 405, '{"error":"Method not allowed."}', {}
+
+    def _campaigns(self, method, owner, wid, rest, data):
+        campaigns = CampaignStore(self.store)
+        if not rest:
+            if method == "GET":
+                items = campaigns.list(owner, wid)
+                return (200, _dump({"campaigns": items}), {}) if items is not None else (
+                    404, '{"error":"Workspace not found."}', {})
+            if method == "POST":
+                doc = campaigns.create(owner, wid, data)
+                return (201, _dump({"campaign": doc}), {})
+            return 405, '{"error":"Method not allowed."}', {}
+        cid = rest[0]
+        act = rest[1] if len(rest) > 1 else ""
+        if not act:
+            if method == "GET":
+                doc = campaigns.get(owner, wid, cid)
+                return (200, _dump({"campaign": doc}), {}) if doc else (
+                    404, '{"error":"Campaign not found."}', {})
+            if method == "PATCH":
+                doc = campaigns.update(owner, wid, cid, data)
+                return (200, _dump({"campaign": doc}), {}) if doc else (
+                    404, '{"error":"Campaign not found."}', {})
+            if method == "DELETE":
+                try:
+                    ok = campaigns.delete(owner, wid, cid)
+                except ValueError as exc:
+                    return 400, _dump({"error": str(exc)[:200]}), {}
+                return (200, '{"ok": true}', {}) if ok else (
+                    404, '{"error":"Campaign not found."}', {})
+            return 405, '{"error":"Method not allowed."}', {}
+        orchestrator = Orchestrator(self.store)
+        if act in ("brief", "plan") and method == "POST":
+            doc = (orchestrator.run_strategy(owner, wid, cid) if act == "brief"
+                   else orchestrator.run_planning(owner, wid, cid))
+            return (200, _dump({"campaign": doc}), {}) if doc else (
+                404, '{"error":"Campaign not found."}', {})
+        if act in ("start", "pause", "resume", "stop") and method == "POST":
+            try:
+                doc = campaigns.transition(owner, wid, cid, act)
+            except ValueError as exc:
+                return 400, _dump({"error": str(exc)[:200]}), {}
+            return (200, _dump({"campaign": doc}), {}) if doc else (
+                404, '{"error":"Campaign not found."}', {})
+        if act == "tasks" and method == "GET":
+            tasks = campaigns.tasks(owner, wid, cid)
+            return (200, _dump({"tasks": tasks}), {}) if tasks is not None else (
+                404, '{"error":"Campaign not found."}', {})
+        return 404, '{"error":"Not found."}', {}
