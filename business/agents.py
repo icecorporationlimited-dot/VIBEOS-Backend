@@ -1,7 +1,9 @@
 """business/agents.py - Phase 2 agents: Strategy, Planning + Orchestrator.
 
-Real LLM calls through the shared provider (engagement.openrouter_ai.build_llm
--> Groq when GROQ_API_KEY is set). No fabricated output: the prompts may only
+Real LLM calls through the shared OpenAI-compatible provider class
+(engagement.openrouter_ai.OpenRouterAI on the Groq endpoint) using Business
+Mode's OWN key: GROQ_BUSINESS_API_KEY - never the personal GROQ_API_KEY.
+No fabricated output: the prompts may only
 use facts that exist in the workspace (products, brand, audience), and when no
 provider is configured the agent task fails with a clear error instead of
 inventing anything. Every agent run is recorded in business_agent_tasks.
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from uuid import uuid4
 
@@ -24,14 +27,26 @@ class AgentError(RuntimeError):
 
 
 def _llm():
+    """Business Mode uses its OWN Groq account, separate from personal mode.
+
+    Reads GROQ_BUSINESS_API_KEY / GROQ_BUSINESS_MODEL (settings.py or env).
+    It deliberately never falls back to the personal GROQ_API_KEY, so the two
+    modes never share quota or billing.
+    """
     try:
-        from engagement.openrouter_ai import build_llm
+        from engagement.openrouter_ai import GROQ_URL, OpenRouterAI
     except ImportError:
         raise AgentError("AI provider module unavailable.") from None
-    llm = build_llm(None)
-    if not llm.ready:
-        raise AgentError("No AI provider configured (set GROQ_API_KEY).")
-    return llm
+    import settings
+    api_key = (os.environ.get("GROQ_BUSINESS_API_KEY")
+               or str(getattr(settings, "GROQ_BUSINESS_API_KEY", "") or "")).strip()
+    if not api_key:
+        raise AgentError(
+            "Business Mode needs its own Groq key. Set GROQ_BUSINESS_API_KEY.")
+    model = (os.environ.get("GROQ_BUSINESS_MODEL")
+             or str(getattr(settings, "GROQ_BUSINESS_MODEL", "") or "")
+             or "llama-3.3-70b-versatile")
+    return OpenRouterAI(api_key, model, api_url=GROQ_URL)
 
 
 def _extract_json(text):
