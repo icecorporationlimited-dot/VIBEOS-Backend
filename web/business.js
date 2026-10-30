@@ -433,6 +433,7 @@
       if (s !== 'stopped') {
         acts += act('brief', briefOk ? 'Re-run brief' : 'Strategy brief');
         if (briefOk) acts += act('plan', planOk ? 'Re-plan' : 'Content plan');
+        if (planOk) acts += act('generate', 'Generate content');
       }
       if (s === 'draft' || s === 'paused') acts += act('start', 'Start');
       if (s === 'active') acts += act('pause', 'Pause');
@@ -442,7 +443,8 @@
         '<strong>' + escapeHTML(c.name) + ' ' + campaignTag(s) + '</strong>' +
         '<small>' + escapeHTML(goalLabel(c.objective)) + ' &middot; ' + (c.duration_days || 14) + ' days' +
         (briefOk ? ' &middot; brief ready' : '') +
-        (planOk ? ' &middot; ' + c.plan.length + ' planned posts' : '') + '</small></div>' +
+        (planOk ? ' &middot; ' + c.plan.length + ' planned posts' : '') +
+        (planOk && (c.content_ready || c.content_failed) ? ' &middot; content: ' + (c.content_ready || 0) + ' ready' + (c.content_failed ? ' / ' + c.content_failed + ' failed' : '') : '') + '</small></div>' +
         '<span style="white-space:nowrap">' + acts + '</span></div>' +
         '<details data-detail="' + escapeHTML(c._id) + '"><summary style="cursor:pointer;color:var(--mut);font-size:12.5px">Brief &amp; plan</summary><div class="detailBody" style="padding:8px 0"></div></details>';
     }).join('');
@@ -455,7 +457,10 @@
   async function loadCampaignDetail(cid, body) {
     body.textContent = 'Loading...';
     try {
-      const r = await api('/' + ws._id + '/campaigns/' + cid);
+      const [r, rc] = await Promise.all([
+        api('/' + ws._id + '/campaigns/' + cid),
+        api('/' + ws._id + '/campaigns/' + cid + '/content'),
+      ]);
       const c = r.campaign || {};
       const b = c.brief || {};
       const blk = (k, arr) => (arr && arr.length)
@@ -463,13 +468,23 @@
         : '';
       const plan = (c.plan || []).map(p =>
         '<div class="item"><strong>Day ' + (p.day || '?') + ' &middot; ' + escapeHTML(p.format || 'feed') + '</strong>' +
-        '<small>' + escapeHTML(p.angle || '') + (p.note ? ' &mdash; ' + escapeHTML(p.note) : '') + '</small></div>').join('');
+        '<small>' + escapeHTML(p.angle || '') + (p.note ? ' &mdash; ' + escapeHTML(p.note) : '') +
+        ' &mdash; ' + escapeHTML(p.status || 'planned') + '</small></div>').join('');
+      const content = (rc.content || []).map(x => {
+        const qcIssues = (x.qc && x.qc.issues && x.qc.issues.length) ? ' &middot; QC: ' + escapeHTML(x.qc.issues.join('; ')) : '';
+        return '<div class="item"><div style="flex:1;min-width:0">' +
+          '<strong>Day ' + (x.day || '?') + ' &middot; ' + escapeHTML(x.format || 'feed') +
+          ' ' + campaignTag(x.status) + '</strong>' +
+          '<small>' + escapeHTML(x.caption || '') + '</small>' +
+          '<small>' + (x.hashtags || []).map(h => escapeHTML(h)).join(' ') + qcIssues + '</small></div></div>';
+      }).join('');
       body.innerHTML =
         blk('Positioning', b.positioning ? [b.positioning] : []) +
         blk('Key messages', b.key_messages) +
         blk('Content angles', b.content_angles) +
         blk('Never say', b.do_not_say) +
-        (plan || '<div class="empty">No plan yet.</div>');
+        (plan || '<div class="empty">No plan yet.</div>') +
+        (content || '');
     } catch (err) { body.textContent = err.message; }
   }
 

@@ -241,6 +241,20 @@ def handle_collage_story(job, db):
     return _run(job, db)
 
 
+# ------------------------------------------------------------------ business_content
+def handle_business_content(job, db):
+    """Business Mode content factory for one campaign plan item (business.content).
+
+    Copywriting -> Creative -> QC agents; output goes to business_content_assets.
+    Runs on Business Mode's own Groq key (GROQ_BUSINESS_API_KEY).
+    """
+    from business.content import ContentFactory
+    from business.store import BusinessStore
+    p = job["payload"]
+    factory = ContentFactory(BusinessStore(db))
+    return factory.run_job(p["workspace_id"], p["campaign_id"], p["item_id"], job["_id"])
+
+
 HANDLERS = {
     "edit": handle_edit,
     "prepare_ready": handle_prepare_ready,
@@ -248,4 +262,5 @@ HANDLERS = {
     "smart_story": handle_smart_story,
     "story_card": handle_story_card,
     "collage_story": handle_collage_story,
+    "business_content": handle_business_content,
 }
