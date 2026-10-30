@@ -73,7 +73,7 @@ JSON_BODY_LIMIT = 16 * 1024
 
 
 def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None,
-                 web_studio=None):
+                 web_studio=None, web_business=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):   # keep tokens/codes out of logs
             logger.info("http %s %s", self.command, urlparse(self.path).path)
@@ -152,6 +152,8 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
                 return self._media(url.path[len("/media/"):-len(".jpg")], "image/jpeg")
             if url.path.startswith("/media/") and url.path.endswith(".mp4"):
                 return self._media(url.path[len("/media/"):-len(".mp4")], "video/mp4")
+            if web_business is not None and url.path.startswith("/web/api/business"):
+                return self._business_send("GET", url)
             self._send(404, "not found", "text/plain")
 
         def _studio_post(self, path):
@@ -182,10 +184,43 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
                 status, out, headers = 500, '{"error":"Something went wrong."}', {}
             return self._send(status, out, "application/json", extra=headers)
 
+        def do_PATCH(self):
+            url = urlparse(self.path)
+            if web_business is not None and url.path.startswith("/web/api/business"):
+                return self._business_send("PATCH", url)
+            self._send(405, "method not allowed", "text/plain", {"Allow": "GET, POST"})
+
+        def do_DELETE(self):
+            url = urlparse(self.path)
+            if web_business is not None and url.path.startswith("/web/api/business"):
+                return self._business_send("DELETE", url)
+            self._send(405, "method not allowed", "text/plain", {"Allow": "GET, POST"})
+
+        def _business_send(self, method, url):
+            """Business Mode API: one dispatch point (session + CSRF checked inside)."""
+            if method != "GET" and self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+                return self._send(415, '{"error":"Expected JSON."}', "application/json")
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return self._send(400, '{"error":"Bad request."}', "application/json")
+            if size < 0 or size > JSON_BODY_LIMIT:
+                return self._send(413, '{"error":"Request too large."}', "application/json")
+            body = self.rfile.read(size) if size else b""
+            try:
+                status, out, headers = web_business.handle(
+                    method, url.path, self.headers.get("Cookie", ""), self.headers, body)
+            except Exception:
+                logger.exception("Business route failed: %s", url.path)
+                status, out, headers = 500, '{"error":"Something went wrong."}', {}
+            return self._send(status, out, "application/json", extra=headers)
+
         def do_POST(self):
             url = urlparse(self.path)
             if web_studio is not None and (url.path == STUDIO_UPLOAD or url.path in STUDIO_JSON_POST):
                 return self._studio_post(url.path)
+            if web_business is not None and url.path.startswith("/web/api/business"):
+                return self._business_send("POST", url)
             if web_login is None or url.path not in ("/logout", "/web/instagram/connect"):
                 return self._send(404, "not found", "text/plain")
             if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/x-www-form-urlencoded":
@@ -272,10 +307,11 @@ def make_handler(cfg, oauth, accounts, blobs, notify, web_login=None, content_bu
 
 
 def start_server(cfg, oauth, accounts, blobs, notify, web_login=None, content_buffer=None,
-                 web_studio=None):
+                 web_studio=None, web_business=None):
     httpd = ThreadingHTTPServer(("0.0.0.0", cfg.http_port),
                                 make_handler(cfg, oauth, accounts, blobs, notify, web_login=web_login,
-                                             content_buffer=content_buffer, web_studio=web_studio))
+                                             content_buffer=content_buffer, web_studio=web_studio,
+                                             web_business=web_business))
     thread = threading.Thread(target=httpd.serve_forever, name="vibeos-http",
                               daemon=True)
     thread.start()

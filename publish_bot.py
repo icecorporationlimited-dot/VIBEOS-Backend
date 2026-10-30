@@ -165,9 +165,18 @@ def build_runtime(db, content_buffer, bot_token):
             posting_engine=getattr(worker, "handles_web_owners", False),
             planner=planner, story_db=db)
 
+    # Business Mode (Phase 1): own collections + one authenticated route service.
+    web_business = None
+    if web_login is not None:
+        from business.store import BusinessStore
+        from business.routes import WebBusinessRoutes
+        business_store = BusinessStore(db)
+        business_store.ensure_indexes()
+        web_business = WebBusinessRoutes(cfg, sessions, business_store)
+
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
-        content_buffer=content_buffer, web_studio=web_studio,
+        content_buffer=content_buffer, web_studio=web_studio, web_business=web_business,
     )
     return Runtime(cfg, oauth, accounts, service, httpd,
                    autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for,
