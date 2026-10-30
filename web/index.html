@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="personal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="business.css">
+<script src="mode.js"></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -31,23 +33,29 @@
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/></symbol>
   <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-brief" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/></symbol>
   <symbol id="i-insta" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".6"/></symbol>
 </svg>
 
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="#dashboard" data-view="dashboard"><span class="ring brand-ring"><i class="av"></i></span>vibeos</a>
+    <a class="brand" href="#dashboard" data-view="dashboard"><span class="ring brand-ring"><i class="av"></i></span>vibeos<em class="brand-tag b-only">business</em></a>
+    <div class="mode-switch" role="group" aria-label="Account mode">
+      <span class="ms-lab ms-p">Personal</span>
+      <label class="switch"><input type="checkbox" id="modeToggle" aria-label="Switch to Business mode"><span></span></label>
+      <span class="ms-lab ms-b">Business</span>
+    </div>
     <nav class="nav" aria-label="Main navigation">
-      <button class="nav-item active" data-view="dashboard"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
-      <button class="nav-item" data-view="media"><svg class="ic"><use href="#i-image"/></svg><span>Library</span><em class="count" id="mediaCount">0</em></button>
-      <button class="nav-item" data-view="occasions"><svg class="ic"><use href="#i-calendar"/></svg><span>Occasions</span></button>
-      <button class="nav-item" data-view="notifications"><svg class="ic"><use href="#i-heart"/></svg><span>Activity</span></button>
-      <button class="nav-item" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
-      <a class="nav-item" href="/app/business.html" title="Business Mode: workspaces, campaigns, growth"><svg class="ic"><use href="#i-bolt"/></svg><span>Business</span></a>
+      <button class="nav-item p-only active" data-view="dashboard"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="nav-item p-only" data-view="media"><svg class="ic"><use href="#i-image"/></svg><span>Library</span><em class="count" id="mediaCount">0</em></button>
+      <button class="nav-item p-only" data-view="occasions"><svg class="ic"><use href="#i-calendar"/></svg><span>Occasions</span></button>
+      <button class="nav-item p-only" data-view="notifications"><svg class="ic"><use href="#i-heart"/></svg><span>Activity</span></button>
+      <button class="nav-item p-only" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
+      <button class="nav-item b-only" data-view="business"><svg class="ic"><use href="#i-brief"/></svg><span>Workspaces</span></button>
     </nav>
-    <button class="btn side-add" id="sideAdd"><svg class="ic"><use href="#i-plus"/></svg>Add photos</button>
+    <button class="btn side-add p-only" id="sideAdd"><svg class="ic"><use href="#i-plus"/></svg>Add photos</button>
     <div class="side-bottom">
-      <div class="tip"><strong>Quick tip</strong><p>Keep autopilot on and keep dropping photos. We edit, caption and schedule them.</p><button id="tipButton">Got it</button></div>
+      <div class="tip p-only"><strong>Quick tip</strong><p>Keep autopilot on and keep dropping photos. We edit, caption and schedule them.</p><button id="tipButton">Got it</button></div>
       <div class="me"><span class="ring sm ig"><span class="av" id="userAvatar">?</span></span><div><strong id="userName">Guest</strong><small id="userSub">Not signed in</small></div></div>
     </div>
   </aside>
@@ -55,7 +63,8 @@
   <main class="main">
     <header class="topbar">
       <a class="brand" href="#dashboard" data-view="dashboard"><span class="ring brand-ring"><i class="av"></i></span>vibeos</a>
-      <button class="avatar-btn" data-view="settings" aria-label="Settings"><span class="ring sm ig"><span class="av" id="topAvatar">?</span></span></button>
+      <label class="switch top-switch"><input type="checkbox" id="modeToggleTop" aria-label="Business mode"><span></span></label>
+      <button class="avatar-btn p-only" data-view="settings" aria-label="Settings"><span class="ring sm ig"><span class="av" id="topAvatar">?</span></span></button>
     </header>
 
     <div class="page">
@@ -173,16 +182,167 @@
           </section>
         </div>
       </section>
+      <section class="view" id="view-business">
+  <p class="eyebrow">Business mode</p>
+  <h1 class="big">Your brand on autopilot.</h1>
+  <p class="sub" id="pageSub">Set up a business workspace, tell us about your brand, and the growth engine takes it from there. Your personal mode stays exactly as it is.</p>
+
+  <div id="signedOut" class="card hidden">
+    <h2>Sign in to continue</h2>
+    <p class="hint">Business workspaces belong to your vibeos account, so sign in first.</p>
+    <a class="btn" href="/login">Sign in</a>
+  </div>
+
+  <div id="main" class="hidden">
+
+    <div id="listSection">
+      <div class="card">
+        <h2>Your workspaces</h2>
+        <p class="hint">Each business gets its own workspace: brand profile, products, campaigns and automation stay separate.</p>
+        <div id="wsList" class="grid"></div>
+        <div style="margin-top:14px">
+          <button class="btn" id="newWsBtn">+ New business workspace</button>
+        </div>
+      </div>
+      <div id="newWsForm" class="card hidden">
+        <h2>New business</h2>
+        <p class="hint">Just a name to start — everything else can be filled in during onboarding.</p>
+        <label for="newName">Business name</label>
+        <input type="text" id="newName" maxlength="120" placeholder="e.g. Kettle &amp; Co. Cafe">
+        <div style="margin-top:14px" class="row">
+          <button class="btn" id="createWsBtn">Create workspace</button>
+          <button class="btn ghost" id="cancelNewWs">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="wsSection" class="hidden">
+      <div class="row" style="align-items:center;margin-bottom:16px">
+        <button class="btn ghost sm" id="backToList">&#8592; All workspaces</button>
+        <span class="spacer" style="flex:1"></span>
+        <span id="wsBadge"></span>
+      </div>
+
+      <div id="onboarding" class="hidden">
+        <div class="card">
+          <div class="steps" id="steps"></div>
+          <h2 id="obTitle">Business basics</h2>
+          <p class="hint" id="obHint"></p>
+
+          <div id="obBody"></div>
+
+          <div class="row" style="margin-top:18px">
+            <button class="btn ghost" id="obPrev">&#8592; Back</button>
+            <button class="btn" id="obSave">Save &amp; continue</button>
+            <button class="btn" id="obFinish" style="display:none">Activate business mode</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="dashboard" class="hidden">
+        <div class="grid three" style="margin-bottom:16px">
+          <div class="stat"><b id="stProducts">0</b><span>products / services</span></div>
+          <div class="stat"><b id="stCampaigns">0</b><span>campaigns</span></div>
+          <div class="stat"><b id="stLeads">0</b><span>leads</span></div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="align-items:baseline;justify-content:space-between">
+            <h2>Products &amp; services</h2>
+            <button class="btn ghost sm" id="addProductBtn">+ Add</button>
+          </div>
+          <p class="hint">The content factory uses these to write accurate posts. Only add what you actually sell — the engine never invents prices or availability.</p>
+          <div id="productForm" class="hidden" style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+            <input type="hidden" id="prodId">
+            <label for="prodName">Name</label>
+            <input type="text" id="prodName" maxlength="160" placeholder="e.g. Cold brew coffee">
+            <div class="row">
+              <div><label for="prodPrice">Price</label><input type="text" id="prodPrice" maxlength="60" placeholder="e.g. 180"></div>
+              <div><label for="prodCurrency">Currency</label><input type="text" id="prodCurrency" maxlength="8" placeholder="INR"></div>
+            </div>
+            <label for="prodDesc">Description</label>
+            <textarea id="prodDesc" maxlength="2000" placeholder="What it is, what makes it special"></textarea>
+            <div class="row">
+              <div><label for="prodCat">Category</label><input type="text" id="prodCat" maxlength="80" placeholder="e.g. beverages"></div>
+              <div><label for="prodUrl">Link (optional)</label><input type="url" id="prodUrl" maxlength="500" placeholder="https://"></div>
+            </div>
+            <div class="row" style="align-items:center;margin-top:12px">
+              <label class="switch"><input type="checkbox" id="prodAvail" checked><i></i>Available</label>
+              <label class="switch"><input type="checkbox" id="prodPromo"><i></i>Promotional</label>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn sm" id="prodSave">Save product</button>
+              <button class="btn ghost sm" id="prodCancel">Cancel</button>
+            </div>
+          </div>
+          <div id="productList"></div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="align-items:baseline;justify-content:space-between">
+            <h2>Campaigns</h2>
+            <button class="btn ghost sm" id="addCampaignBtn">+ New campaign</button>
+          </div>
+          <p class="hint">A campaign turns your brand profile into a concrete plan. The Strategy agent writes the brief, the Planning agent builds the day-by-day content plan. Nothing is published from here.</p>
+          <div id="campaignForm" class="hidden" style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+            <label for="campName">Campaign name</label>
+            <input type="text" id="campName" maxlength="120" placeholder="e.g. October footfall push">
+            <div class="row">
+              <div><label for="campObjective">Objective</label><select id="campObjective"></select></div>
+              <div><label for="campDuration">Duration</label><select id="campDuration"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option></select></div>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn sm" id="campSave">Create campaign</button>
+              <button class="btn ghost sm" id="campCancel">Cancel</button>
+            </div>
+          </div>
+          <div id="campaignList"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <h2>Automation</h2>
+            <p class="hint">Everything starts OFF. Switch on only what you want this business to do on its own.</p>
+            <label class="switch"><input type="checkbox" id="setAutoPublish"><i></i>Auto-publish campaigns</label>
+            <label class="switch"><input type="checkbox" id="setAutoComments"><i></i>Post first comments</label>
+            <label class="switch"><input type="checkbox" id="setAutoReplies"><i></i>Reply to comments</label>
+            <div class="row" style="margin-top:14px">
+              <div>
+                <label for="setDaily">Daily posts cap</label>
+                <select id="setDaily"></select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <div><label for="setQuietStart">Quiet from</label><select id="setQuietStart"></select></div>
+              <div><label for="setQuietEnd">Quiet until</label><select id="setQuietEnd"></select></div>
+            </div>
+            <p class="note">Paid promotion is never automatic. Anything that spends money will always ask you first.</p>
+          </div>
+          <div class="card">
+            <h2>Activity log</h2>
+            <p class="hint">Append-only audit trail. Entries can never be edited or removed.</p>
+            <div id="eventList"></div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn ghost sm" id="resumeSetup">Continue setup / edit profile</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+      </section>
     </div>
   </main>
 </div>
 
 <nav class="tabbar" aria-label="Main navigation">
-  <button class="tab-item active" data-view="dashboard" aria-label="Home"><svg class="ic"><use href="#i-home"/></svg></button>
-  <button class="tab-item" data-view="media" aria-label="Library"><svg class="ic"><use href="#i-image"/></svg></button>
-  <button class="tab-add" id="tabAdd" aria-label="Add photos"><svg class="ic"><use href="#i-plus"/></svg></button>
-  <button class="tab-item" data-view="occasions" aria-label="Occasions"><svg class="ic"><use href="#i-calendar"/></svg></button>
-  <button class="tab-item" data-view="notifications" aria-label="Activity"><svg class="ic"><use href="#i-heart"/></svg></button>
+  <button class="tab-item p-only active" data-view="dashboard" aria-label="Home"><svg class="ic"><use href="#i-home"/></svg></button>
+  <button class="tab-item p-only" data-view="media" aria-label="Library"><svg class="ic"><use href="#i-image"/></svg></button>
+  <button class="tab-add p-only" id="tabAdd" aria-label="Add photos"><svg class="ic"><use href="#i-plus"/></svg></button>
+  <button class="tab-item p-only" data-view="occasions" aria-label="Occasions"><svg class="ic"><use href="#i-calendar"/></svg></button>
+  <button class="tab-item p-only" data-view="notifications" aria-label="Activity"><svg class="ic"><use href="#i-heart"/></svg></button>
+  <button class="tab-item b-only" data-view="business" aria-label="Workspaces"><svg class="ic"><use href="#i-brief"/></svg></button>
 </nav>
 
 <div class="sheet-wrap" id="sheetWrap" hidden>
@@ -218,6 +378,6 @@
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input id="filePicker" type="file" accept="image/*" multiple hidden>
-<script src="config.js"></script><script src="app.js"></script>
+<script src="config.js"></script><script src="app.js"></script><script src="business.js"></script>
 </body>
 </html>
