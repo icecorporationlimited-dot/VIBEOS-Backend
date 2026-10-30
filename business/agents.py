@@ -153,7 +153,7 @@ class Orchestrator:
             + "\n\nWrite a campaign brief as JSON with keys: "
             + '"positioning" (1-2 sentences), "key_messages" (3-5 short strings), '
             + '"content_angles" (4-6 short strings), "do_not_say" (2-4 short strings '
-            + "the writers must avoid), "cta_ideas" (2-3 short strings). "
+            + 'the writers must avoid), "cta_ideas" (2-3 short strings). '
             + "Write it in the business's content language."
         )
         try:
