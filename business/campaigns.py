@@ -38,7 +38,13 @@ class CampaignStore:
     def list(self, owner, workspace_id):
         if self._ws(owner, workspace_id) is None:
             return None
-        return list(self.col.find({"workspace_id": workspace_id}).sort("created_at", 1))
+        out = list(self.col.find({"workspace_id": workspace_id}).sort("created_at", 1))
+        for c in out:
+            c["content_ready"] = self.store.content.count_documents(
+                {"campaign_id": c["_id"], "status": "ready"})
+            c["content_failed"] = self.store.content.count_documents(
+                {"campaign_id": c["_id"], "status": "failed"})
+        return out
 
     def get(self, owner, workspace_id, campaign_id):
         if self._ws(owner, workspace_id) is None:

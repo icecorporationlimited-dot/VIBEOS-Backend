@@ -51,6 +51,7 @@ class BusinessStore:
     """All Business Mode collections. Owns nothing personal."""
 
     def __init__(self, db):
+        self.db = db
         self.workspaces = db["business_workspaces"]
         self.campaigns = db["business_campaigns"]
         self.products = db["business_products"]

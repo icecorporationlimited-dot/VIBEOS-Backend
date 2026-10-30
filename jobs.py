@@ -34,7 +34,8 @@ MAX_ATTEMPTS = 3
 DEFAULT_LEASE_SECONDS = 360          # longer than the slowest job (reel: 300 s ffmpeg timeout)
 JOB_TTL_DAYS = 2                     # finished job rows are removed after this
 
-TYPES = ("prepare_ready", "edit", "reel", "smart_story", "story_card", "collage_story")
+TYPES = ("prepare_ready", "edit", "reel", "smart_story", "story_card", "collage_story",
+          "business_content")
 
 
 class JobFailed(RuntimeError):

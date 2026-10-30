@@ -13,7 +13,7 @@ from http.cookies import SimpleCookie
 
 from .agents import AgentError, Orchestrator
 from .campaigns import CampaignStore
-from .store import owner_key
+from .store import now, owner_key
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +212,40 @@ class WebBusinessRoutes:
                 return 400, _dump({"error": str(exc)[:200]}), {}
             return (200, _dump({"campaign": doc}), {}) if doc else (
                 404, '{"error":"Campaign not found."}', {})
+        if act == "generate" and method == "POST":
+            import jobs
+            campaign = campaigns.get(owner, wid, cid)
+            if campaign is None:
+                return 404, '{"error":"Campaign not found."}', {}
+            if campaign.get("status") == "stopped":
+                return 400, '{"error":"Campaign is stopped."}', {}
+            if not campaign.get("plan"):
+                return 400, '{"error":"Generate the content plan first."}', {}
+            queued = 0
+            for item in campaign.get("plan") or []:
+                if item.get("status") not in ("planned", "failed"):
+                    continue
+                if jobs.find_open(self.store.db, "business_content", item["id"]):
+                    continue
+                job_id = jobs.enqueue(
+                    self.store.db, "business_content",
+                    {"workspace_id": wid, "campaign_id": cid, "item_id": item["id"]},
+                    asset_id=item["id"])
+                self.store.campaigns.update_one(
+                    {"_id": cid, "workspace_id": wid, "plan.id": item["id"]},
+                    {"$set": {"plan.$.status": "queued", "plan.$.job_id": job_id,
+                              "updated_at": now()}})
+                queued += 1
+            self.store.event(wid, "content_generation",
+                             "Queued " + str(queued) + " content items for '"
+                             + campaign.get("name", "") + "'")
+            return 202, _dump({"queued": queued,
+                               "campaign": campaigns.get(owner, wid, cid)}), {}
+        if act == "content" and method == "GET":
+            if campaigns.get(owner, wid, cid) is None:
+                return 404, '{"error":"Campaign not found."}', {}
+            items = list(self.store.content.find({"campaign_id": cid}).sort("day", 1))
+            return 200, _dump({"content": items}), {}
         if act == "tasks" and method == "GET":
             tasks = campaigns.tasks(owner, wid, cid)
             return (200, _dump({"tasks": tasks}), {}) if tasks is not None else (

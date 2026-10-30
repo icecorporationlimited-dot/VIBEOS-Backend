@@ -12,5 +12,6 @@ from .store import BusinessStore, CATEGORIES, GOALS, owner_key
 from .routes import WebBusinessRoutes
 from .agents import AgentError, Orchestrator
 from .campaigns import CampaignStore
+from .content import ContentFactory
 
 __all__ = ["BusinessStore", "WebBusinessRoutes", "CATEGORIES", "GOALS", "owner_key"]
