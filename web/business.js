@@ -472,11 +472,20 @@
         ' &mdash; ' + escapeHTML(p.status || 'planned') + '</small></div>').join('');
       const content = (rc.content || []).map(x => {
         const qcIssues = (x.qc && x.qc.issues && x.qc.issues.length) ? ' &middot; QC: ' + escapeHTML(x.qc.issues.join('; ')) : '';
+        const sch = x.schedule || {};
+        const schedLine = sch.status
+          ? '<small>Publishing: <strong>' + escapeHTML(sch.status) + '</strong>' +
+            (sch.reason ? ' &mdash; ' + escapeHTML(sch.reason) : '') +
+            (sch.scheduled_at ? ' &middot; ' + escapeHTML(when(sch.scheduled_at)) : '') +
+            (sch.permalink ? ' &middot; <a href="' + escapeHTML(sch.permalink) + '" target="_blank" rel="noopener">view post</a>' : '') +
+            '</small>'
+          : '';
         return '<div class="item"><div style="flex:1;min-width:0">' +
           '<strong>Day ' + (x.day || '?') + ' &middot; ' + escapeHTML(x.format || 'feed') +
           ' ' + campaignTag(x.status) + '</strong>' +
           '<small>' + escapeHTML(x.caption || '') + '</small>' +
-          '<small>' + (x.hashtags || []).map(h => escapeHTML(h)).join(' ') + qcIssues + '</small></div></div>';
+          '<small>' + (x.hashtags || []).map(h => escapeHTML(h)).join(' ') + qcIssues + '</small>' +
+          schedLine + '</div></div>';
       }).join('');
       body.innerHTML =
         blk('Positioning', b.positioning ? [b.positioning] : []) +

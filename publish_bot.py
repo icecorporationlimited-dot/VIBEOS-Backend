@@ -55,12 +55,13 @@ STATUS_ICON = {"queued": "🕒", "running": "⏳", "retry": "🔁", "published":
 class Runtime:
     def __init__(self, cfg, oauth, accounts, service, httpd=None,
                  autopilot=None, calendar=None, worker=None, tz_for=None,
-                 web_ingest=None):
+                 web_ingest=None, business_agent=None):
         self.cfg, self.oauth, self.accounts = cfg, oauth, accounts
         self.service, self.httpd = service, httpd
         self.web_ingest = web_ingest
         self.autopilot, self.calendar, self.worker = autopilot, calendar, worker
         self.tz_for = tz_for
+        self.business_agent = business_agent
 
 
 def send_telegram(bot_token, tg_id, text):
@@ -174,13 +175,24 @@ def build_runtime(db, content_buffer, bot_token):
         business_store.ensure_indexes()
         web_business = WebBusinessRoutes(cfg, sessions, business_store)
 
+    # Business Mode (Phase 4): the Distribution agent schedules QC-passed
+    # content, renders it (worker job) and publishes through the SAME verified
+    # PublishService. It only runs when web publishing is enabled, because a
+    # web-owned publish job must be claimable by the worker.
+    business_agent = None
+    if web_login is not None and web_publishing and web_business is not None:
+        from business.distribution import BusinessDistributionAgent
+        business_agent = BusinessDistributionAgent(
+            business_store, content_buffer, service, accounts, db)
+        business_agent.start()
+
     httpd = start_server(
         cfg, oauth, accounts, content_buffer.blobs, notify, web_login=web_login,
         content_buffer=content_buffer, web_studio=web_studio, web_business=web_business,
     )
     return Runtime(cfg, oauth, accounts, service, httpd,
                    autopilot=autopilot, calendar=calendar, worker=worker, tz_for=tz_for,
-                   web_ingest=web_ingest)
+                   web_ingest=web_ingest, business_agent=business_agent)
 
 
 def start_worker(rt):
@@ -188,6 +200,8 @@ def start_worker(rt):
         rt.worker.start()
     if rt is not None and rt.web_ingest is not None:
         rt.web_ingest.start()
+    if rt is not None and getattr(rt, "business_agent", None) is not None:
+        rt.business_agent.start()
 
 
 def shutdown(rt):
@@ -198,6 +212,8 @@ def shutdown(rt):
         rt.worker.stop()
     if rt.web_ingest is not None:
         rt.web_ingest.stop()
+    if getattr(rt, "business_agent", None) is not None:
+        rt.business_agent.stop()
     if rt.httpd is not None:
         rt.httpd.shutdown()
 
