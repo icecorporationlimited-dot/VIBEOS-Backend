@@ -63,6 +63,21 @@ def _extract_json(text):
         raise AgentError("AI returned malformed JSON.") from None
 
 
+def _perf_block(campaign):
+    """Phase 5 feedback loop: the Planning agent sees the last optimisation
+    (built ONLY from real Instagram metrics) so the next plan adjusts."""
+    optimisation = campaign.get("optimisation") or {}
+    if not optimisation.get("summary"):
+        return ""
+    data = {"summary": optimisation.get("summary"),
+            "recommendations": optimisation.get("recommendations"),
+            "numbers": optimisation.get("numbers")}
+    return ("\n\nPrevious campaign performance (REAL Instagram metrics only - "
+            "the numbers and recommendations from the last optimisation run; "
+            "use them to adjust angles and formats, never invent numbers):\n"
+            + json.dumps(data, default=str)[:1800])
+
+
 class Orchestrator:
     """Coordinates the Business Mode agents. Phase 2: strategy + planning."""
 
@@ -195,6 +210,7 @@ class Orchestrator:
         target = max(1, min(MAX_PLAN_ITEMS, daily * duration))
         user = (
             "Campaign brief:\n" + json.dumps(brief, default=str)[:3500]
+            + _perf_block(campaign)
             + "\n\nProducts/services the business actually offers (the ONLY "
               "products you may reference; use the given price exactly or no "
               "price at all):\n"

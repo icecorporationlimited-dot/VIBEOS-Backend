@@ -144,3 +144,23 @@ class GraphClient:
     def media_info(self, media_id, token):
         return self._call("GET", self._url(media_id), {
             "fields": "permalink,media_type,timestamp", "access_token": token})
+
+    def media_stats(self, media_id, token):
+        """Public counts (likes/comments) for one owned media object."""
+        return self._call("GET", self._url(media_id), {
+            "fields": "like_count,comments_count,timestamp,permalink",
+            "access_token": token})
+
+    def media_insights(self, media_id, token):
+        """Impressions/reach for one owned media (needs manage-insights scope)."""
+        body = self._call("GET", self._url(media_id + "/insights"), {
+            "metric": "impressions,reach", "access_token": token})
+        out = {}
+        for row in (body.get("data") or []):
+            if row.get("name") in ("impressions", "reach"):
+                values = row.get("values") or [{}]
+                try:
+                    out[row["name"]] = int(values[0].get("value"))
+                except (TypeError, ValueError):
+                    continue
+        return out
