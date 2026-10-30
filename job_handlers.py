@@ -255,6 +255,42 @@ def handle_business_content(job, db):
     return factory.run_job(p["workspace_id"], p["campaign_id"], p["item_id"], job["_id"])
 
 
+def handle_business_render(job, db):
+    """Business Mode (Phase 4): render a branded card JPEG from the content
+    doc's QC-approved visual spec. Reel-format items are HELD honestly -
+    reel video publishing is not implemented and is never faked."""
+    from business.render import render_card
+    from business.store import BusinessStore, now
+    store = BusinessStore(db)
+    p = job["payload"]
+    doc = store.content.find_one({"_id": p["content_id"],
+                                  "workspace_id": p["workspace_id"]})
+    if doc is None:
+        raise KeyError("unknown content " + str(p.get("content_id")))
+    if doc.get("status") == "rendered":
+        return {"skipped": "already rendered"}
+    fmt = doc.get("format") or "feed"
+    if fmt not in ("feed", "story"):
+        store.content.update_one({"_id": doc["_id"]}, {"$set": {
+            "status": "held", "updated_at": now(),
+            "render": {"status": "held",
+                       "reason": "Reel publishing is not implemented yet; "
+                                 "this item is held rather than faked."}}})
+        return {"status": "held", "reason": "reel publishing not implemented"}
+    if doc.get("status") != "ready":
+        return {"skipped": "content status " + str(doc.get("status"))}
+    ws = store.workspaces.find_one({"_id": p["workspace_id"]})
+    if ws is None:
+        raise KeyError("unknown workspace " + str(p.get("workspace_id")))
+    data = render_card(doc, ws, fmt)
+    blob_id = jobs.put_blob(db, data, filename="bizcard_%s.jpg" % doc["_id"][:8])
+    store.content.update_one({"_id": doc["_id"]}, {"$set": {
+        "status": "rendered", "updated_at": now(),
+        "render": {"blob_id": blob_id, "format": fmt, "job_id": job["_id"],
+                   "rendered_at": now()}}})
+    return {"blob_id": blob_id, "size_bytes": len(data)}
+
+
 HANDLERS = {
     "edit": handle_edit,
     "prepare_ready": handle_prepare_ready,
@@ -263,4 +299,5 @@ HANDLERS = {
     "story_card": handle_story_card,
     "collage_story": handle_collage_story,
     "business_content": handle_business_content,
+    "business_render": handle_business_render,
 }

@@ -284,6 +284,48 @@ class ContentBuffer:
         self.assets.insert_one(doc)
         return {"asset": doc, "duplicate": False}
 
+    def add_business_card(self, user_id, data: bytes, *, caption: str, hashtags,
+                          fmt="photo", batch_id=None) -> dict:
+        """Register a Business Mode branded card (Phase 4) directly as `ready`.
+
+        The JPEG was rendered by the worker from the workspace's QC-passed
+        content, so it skips analysis exactly like the Reel / trend-card paths.
+        `fmt` is the planned publish format ("photo" or "story"); the asset is
+        pinned to that format (story_only / post_only), so it can never be
+        reposted in the other shape by any route.
+        """
+        if len(data) > MAX_MEDIA_BYTES["photo"]:
+            raise MediaTooLarge("photo exceeds size limit")
+        flt, stamp = _scope(user_id)
+        digest = hashlib.sha256(data).hexdigest()
+        existing = self.assets.find_one({
+            **flt, "sha256": digest,
+            "status": {"$in": [UPLOADED, ANALYZED, SELECTED, READY]}})
+        if existing:
+            return {"asset": existing, "duplicate": True}
+        self._check_quota(user_id)
+        asset_id = uuid.uuid4().hex
+        variant = "story" if fmt == "story" else "post"
+        blob_id = self.blobs.put(data, filename="bizcard_%s.jpg" % asset_id[:8])
+        now = _now()
+        doc = {
+            "_id": asset_id, **stamp, "kind": "photo", "batch_id": batch_id,
+            "filename": "bizcard_%s.jpg" % asset_id[:8], "source": "business_card",
+            "sha256": digest, "size_bytes": len(data), "blob_id": blob_id,
+            "status": READY,
+            "analysis": {"quality_score": None, "notes": ["business_card"]},
+            "creative": {"caption": caption or "", "hashtags": list(hashtags or []),
+                         "vibe": "natural", "variants": {variant: blob_id}},
+            "story_only": fmt == "story", "post_only": fmt != "story",
+            "route": {"format": fmt, "asset_ids": [asset_id], "group_id": None,
+                      "decision": {}},
+            "reject_reason": None,
+            "history": [{"status": READY, "at": now}],
+            "created_at": now, "updated_at": now,
+        }
+        self.assets.insert_one(doc)
+        return {"asset": doc, "duplicate": False}
+
     # ---- status machine --------------------------------------------------
     def _transition(self, asset_id, to_status, set_fields=None):
         current = self.assets.find_one({"_id": asset_id})

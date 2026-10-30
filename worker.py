@@ -32,7 +32,7 @@ IDLE_SLEEP = 1.0                      # seconds between polls when the queue is 
 CLEANUP_EVERY = 900                   # seconds between blob / rejected-asset sweeps
 REJECTED_BLOB_DAYS = 7
 # Per-type hard limit for the child process; must be < jobs.DEFAULT_LEASE_SECONDS.
-TIMEOUTS = {"reel": 340, "prepare_ready": 120, "edit": 120, "smart_story": 90, "story_card": 60, "collage_story": 200, "business_content": 120}
+TIMEOUTS = {"reel": 340, "prepare_ready": 120, "edit": 120, "smart_story": 90, "story_card": 60, "collage_story": 200, "business_content": 120, "business_render": 90}
 
 _stop = False
 
