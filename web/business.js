@@ -1,5 +1,5 @@
 // web/business.js - Business Mode UI (Phase 1b).
-// Served by the backend at /app/business.html (same origin), so the session
+// Embedded in the main app (index.html, #view-business); same origin, so the session
 // cookies are first-party. Talks only to /web/api/business* (Phase 1 APIs):
 //   GET/POST  /web/api/business            list / create workspaces
 //   GET/PATCH/DELETE /web/api/business/{wid}
@@ -27,7 +27,7 @@
     ['product_sales', 'Product sales'], ['service_promotion', 'Promote services'], ['local_discovery', 'Local discovery'],
   ];
   const AGE_RANGES = ['under_18', '18_24', '25_34', '35_44', '45_54', '55_plus'];
-  const AGE_LABELS = {under_18: 'Under 18', 18_24: '18-24', 25_34: '25-34', 35_44: '35-44', 45_54: '45-54', 55_plus: '55+'};
+  const AGE_LABELS = {'under_18': 'Under 18', '18_24': '18-24', '25_34': '25-34', '35_44': '35-44', '45_54': '45-54', '55_plus': '55+'};
   const OB_STEPS = [
     ['basics', 'Basics', 'Name, category and where you are. This is what the engine knows about you.'],
     ['brand', 'Brand', 'Colors, personality and voice. Campaign copy is written to match this.'],
@@ -249,8 +249,7 @@
       };
     }
     if (step === 'audience') {
-      const split = v => v.split(/[,
-]/).map(s => s.trim()).filter(Boolean);
+      const split = v => v.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
       return {
         audience: {
           description: $('fAudDesc').value.trim(),
@@ -599,5 +598,14 @@
     if (!me.signed_in) return;
     try { await loadWorkspaces(); } catch (err) { toast(err.message); }
   }
-  boot();
+  // Business Mode lives inside the main app now; app.js calls enter() whenever
+  // the Business view is shown. The workspace list is refreshed each time.
+  let booted = false;
+  window.VibeosBusiness = {
+    enter() {
+      if (ws) return;              // already inside a workspace: keep their place
+      booted = true;
+      boot();
+    },
+  };
 })();
