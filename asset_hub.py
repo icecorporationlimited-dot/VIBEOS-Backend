@@ -78,7 +78,7 @@ def _find(kind, filename, first):
     dirs = ((Path(first),) if first else ()) + POOLS.get(kind, ())
     has_ext = Path(filename).suffix.lower() in exts
     for d in dirs:
-        for name in (filename, *(stem + e for e in exts) if not has_ext else ()):
+        for name in (filename, *((stem + e for e in exts) if not has_ext else ())):
             p = d / name
             if p.is_file():
                 return p
