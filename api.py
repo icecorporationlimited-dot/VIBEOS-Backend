@@ -269,7 +269,7 @@ _client = httpx.AsyncClient(
 )
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "HEAD"])
+@app.api_route("/{path:path}", methods=["GET", "POST", "HEAD", "PATCH", "DELETE"])
 async def proxy(path: str, request: Request):
     if path.startswith("api/"):
         raise HTTPException(404, "Not found")

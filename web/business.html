@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0A0E" media="(prefers-color-scheme: dark)">
+<title>vibeos business: your brand on autopilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F2F5;--card:#FFFFFF;--ink:#141318;--mut:#6F6B7B;--line:#E6E4EC;
+  --acc:#D62976;--acc2:#962FBF;--ok:#1F9D55;--warn:#B7791F;--bad:#C0392B;
+  --chip:#EFEDF4;--radius:16px;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#0B0A0E;--card:#16151C;--ink:#F5F4F8;--mut:#A19DAF;--line:#2A2833;--chip:#232129;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.15;margin:0}
+a{color:inherit}
+.wrap{max-width:960px;margin:0 auto;padding:20px 18px 90px}
+header.top{display:flex;align-items:center;gap:12px;padding:14px 0 22px}
+.brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:19px;text-decoration:none;display:flex;align-items:center;gap:9px}
+.brand .ring{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(from 210deg,#FEDA75,#FA7E1E,#D62976,#962FBF,#4F5BD5);color:#fff;font-size:14px;font-weight:800}
+.spacer{flex:1}
+.back{color:var(--mut);text-decoration:none;font-weight:600;font-size:14px;border:1px solid var(--line);border-radius:999px;padding:7px 14px}
+.back:hover{color:var(--ink)}
+.eyebrow{color:var(--mut);text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700;margin:0 0 6px}
+h1.big{font-size:clamp(26px,5vw,34px);margin-bottom:8px}
+.sub{color:var(--mut);margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card h2{font-size:18px;margin-bottom:4px}
+.card .hint{color:var(--mut);font-size:13px;margin:0 0 14px}
+.grid{display:grid;gap:16px}
+@media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+label{display:block;font-weight:600;font-size:13px;margin:12px 0 6px}
+label:first-of-type{margin-top:0}
+input[type=text],input[type=url],textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
+textarea{min-height:74px;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--acc2);outline-offset:1px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1;min-width:140px}
+.btn{border:0;border-radius:999px;padding:11px 20px;font:600 15px "Instrument Sans",sans-serif;background:linear-gradient(93deg,#D62976,#962FBF);color:#fff;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:7px 14px;font-size:13px}
+.btn:disabled{opacity:.55;cursor:default}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.chipbtn{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:7px 13px;font:500 13px "Instrument Sans",sans-serif;cursor:pointer}
+.chipbtn.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+.swatch{width:34px;height:34px;border-radius:9px;border:2px solid var(--line);cursor:pointer;position:relative}
+.swatch input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.swatches{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.ws-card{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);cursor:pointer;width:100%;text-align:left;color:inherit;font:inherit}
+.ws-card:hover{border-color:var(--acc)}
+.ws-av{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:18px;color:#fff;flex:none}
+.ws-main{flex:1;min-width:0}
+.ws-main strong{display:block;font-size:15px}
+.ws-main small{color:var(--mut);font-size:13px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 9px}
+.tag.onboarding{background:var(--chip);color:var(--mut)}
+.tag.active{background:rgba(31,157,85,.14);color:var(--ok)}
+.stat{display:flex;flex-direction:column;gap:2px;padding:14px;border:1px solid var(--line);border-radius:12px}
+.stat b{font-family:"Bricolage Grotesque",sans-serif;font-size:22px}
+.stat span{color:var(--mut);font-size:12px}
+.steps{display:flex;gap:6px;margin:2px 0 18px;flex-wrap:wrap}
+.step{font-size:12px;font-weight:700;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
+.step.on{color:#fff;background:linear-gradient(93deg,#D62976,#962FBF);border-color:transparent}
+.step.done{color:var(--ok);border-color:var(--ok)}
+.item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item strong{font-size:14px}
+.item small{color:var(--mut);display:block;font-size:12.5px;overflow-wrap:anywhere}
+.time{color:var(--mut);font-size:12px;white-space:nowrap}
+.mini{border:0;background:none;color:var(--bad);font:600 13px "Instrument Sans",sans-serif;cursor:pointer;padding:4px 6px}
+.mini.mut{color:var(--mut)}
+.switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;font-size:14px}
+.switch input{position:absolute;opacity:0}
+.switch i{width:42px;height:24px;border-radius:999px;background:var(--chip);position:relative;transition:.2s;flex:none}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+.switch input:checked+i{background:var(--ok)}
+.switch input:checked+i::after{left:21px}
+.switch input:disabled+i{opacity:.5}
+.note{font-size:12.5px;color:var(--warn);background:rgba(183,121,31,.1);border-radius:10px;padding:10px 12px;margin:10px 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);padding:11px 20px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:.25s;max-width:88vw;z-index:50}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.hidden{display:none}
+.empty{text-align:center;color:var(--mut);padding:26px 10px}
+.money{font-variant-numeric:tabular-nums;font-weight:700;color:var(--acc)}
+footer{color:var(--mut);font-size:12px;text-align:center;padding:18px 0 4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="/app/business.html"><span class="ring">v</span>vibeos <em style="font-style:normal;color:var(--mut);font-weight:600">business</em></a>
+    <span class="spacer"></span>
+    <a class="back" href="/app">&#8592; Personal studio</a>
+  </header>
+
+  <p class="eyebrow">Business mode</p>
+  <h1 class="big">Your brand on autopilot.</h1>
+  <p class="sub" id="pageSub">Set up a business workspace, tell us about your brand, and the growth engine takes it from there. Your personal mode stays exactly as it is.</p>
+
+  <div id="signedOut" class="card hidden">
+    <h2>Sign in to continue</h2>
+    <p class="hint">Business workspaces belong to your vibeos account, so sign in first.</p>
+    <a class="btn" href="/login">Sign in</a>
+  </div>
+
+  <div id="main" class="hidden">
+
+    <div id="listSection">
+      <div class="card">
+        <h2>Your workspaces</h2>
+        <p class="hint">Each business gets its own workspace: brand profile, products, campaigns and automation stay separate.</p>
+        <div id="wsList" class="grid"></div>
+        <div style="margin-top:14px">
+          <button class="btn" id="newWsBtn">+ New business workspace</button>
+        </div>
+      </div>
+      <div id="newWsForm" class="card hidden">
+        <h2>New business</h2>
+        <p class="hint">Just a name to start — everything else can be filled in during onboarding.</p>
+        <label for="newName">Business name</label>
+        <input type="text" id="newName" maxlength="120" placeholder="e.g. Kettle &amp; Co. Cafe">
+        <div style="margin-top:14px" class="row">
+          <button class="btn" id="createWsBtn">Create workspace</button>
+          <button class="btn ghost" id="cancelNewWs">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="wsSection" class="hidden">
+      <div class="row" style="align-items:center;margin-bottom:16px">
+        <button class="btn ghost sm" id="backToList">&#8592; All workspaces</button>
+        <span class="spacer" style="flex:1"></span>
+        <span id="wsBadge"></span>
+      </div>
+
+      <div id="onboarding" class="hidden">
+        <div class="card">
+          <div class="steps" id="steps"></div>
+          <h2 id="obTitle">Business basics</h2>
+          <p class="hint" id="obHint"></p>
+
+          <div id="obBody"></div>
+
+          <div class="row" style="margin-top:18px">
+            <button class="btn ghost" id="obPrev">&#8592; Back</button>
+            <button class="btn" id="obSave">Save &amp; continue</button>
+            <button class="btn" id="obFinish" style="display:none">Activate business mode</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="dashboard" class="hidden">
+        <div class="grid three" style="margin-bottom:16px">
+          <div class="stat"><b id="stProducts">0</b><span>products / services</span></div>
+          <div class="stat"><b id="stCampaigns">0</b><span>campaigns</span></div>
+          <div class="stat"><b id="stLeads">0</b><span>leads</span></div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="align-items:baseline;justify-content:space-between">
+            <h2>Products &amp; services</h2>
+            <button class="btn ghost sm" id="addProductBtn">+ Add</button>
+          </div>
+          <p class="hint">The content factory uses these to write accurate posts. Only add what you actually sell — the engine never invents prices or availability.</p>
+          <div id="productForm" class="hidden" style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+            <input type="hidden" id="prodId">
+            <label for="prodName">Name</label>
+            <input type="text" id="prodName" maxlength="160" placeholder="e.g. Cold brew coffee">
+            <div class="row">
+              <div><label for="prodPrice">Price</label><input type="text" id="prodPrice" maxlength="60" placeholder="e.g. 180"></div>
+              <div><label for="prodCurrency">Currency</label><input type="text" id="prodCurrency" maxlength="8" placeholder="INR"></div>
+            </div>
+            <label for="prodDesc">Description</label>
+            <textarea id="prodDesc" maxlength="2000" placeholder="What it is, what makes it special"></textarea>
+            <div class="row">
+              <div><label for="prodCat">Category</label><input type="text" id="prodCat" maxlength="80" placeholder="e.g. beverages"></div>
+              <div><label for="prodUrl">Link (optional)</label><input type="url" id="prodUrl" maxlength="500" placeholder="https://"></div>
+            </div>
+            <div class="row" style="align-items:center;margin-top:12px">
+              <label class="switch"><input type="checkbox" id="prodAvail" checked><i></i>Available</label>
+              <label class="switch"><input type="checkbox" id="prodPromo"><i></i>Promotional</label>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn sm" id="prodSave">Save product</button>
+              <button class="btn ghost sm" id="prodCancel">Cancel</button>
+            </div>
+          </div>
+          <div id="productList"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <h2>Automation</h2>
+            <p class="hint">Everything starts OFF. Switch on only what you want this business to do on its own.</p>
+            <label class="switch"><input type="checkbox" id="setAutoPublish"><i></i>Auto-publish campaigns</label>
+            <label class="switch"><input type="checkbox" id="setAutoComments"><i></i>Post first comments</label>
+            <label class="switch"><input type="checkbox" id="setAutoReplies"><i></i>Reply to comments</label>
+            <div class="row" style="margin-top:14px">
+              <div>
+                <label for="setDaily">Daily posts cap</label>
+                <select id="setDaily"></select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <div><label for="setQuietStart">Quiet from</label><select id="setQuietStart"></select></div>
+              <div><label for="setQuietEnd">Quiet until</label><select id="setQuietEnd"></select></div>
+            </div>
+            <p class="note">Paid promotion is never automatic. Anything that spends money will always ask you first.</p>
+          </div>
+          <div class="card">
+            <h2>Activity log</h2>
+            <p class="hint">Append-only audit trail. Entries can never be edited or removed.</p>
+            <div id="eventList"></div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn ghost sm" id="resumeSetup">Continue setup / edit profile</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Business Mode is separate from your personal feed. Personal-mode settings are untouched.</footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="business.js"></script>
+</body>
+</html>
