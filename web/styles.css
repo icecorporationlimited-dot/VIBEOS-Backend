@@ -364,3 +364,11 @@ h1{font:800 clamp(30px,4.4vw,44px)/1.04 var(--display);letter-spacing:-.04em}
 @media (prefers-reduced-motion:reduce){
   *,*::before{animation:none!important;transition:none!important}
 }
+
+/* ---- Personal / Business mode switch ---- */
+html[data-mode="personal"] .b-only{display:none!important}
+html[data-mode="business"] .p-only{display:none!important}
+.mode-switch{display:flex;align-items:center;justify-content:center;gap:10px;margin:14px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;font-size:13px;font-weight:600;color:var(--mute)}
+html[data-mode="personal"] .ms-p,html[data-mode="business"] .ms-b{color:var(--ink);font-weight:700}
+.brand-tag{font-style:normal;font-weight:700;color:var(--pink);margin-left:8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--pink);border-radius:999px;padding:2px 8px}
+.top-switch{margin-left:auto;margin-right:10px}
